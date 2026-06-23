@@ -257,7 +257,7 @@ final class MockURLProtocol: URLProtocol {
         }
 
         do {
-            let (response, data) = try handler(request)
+            let (response, data) = try handler(requestWithResolvedBody)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
@@ -267,4 +267,30 @@ final class MockURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    private var requestWithResolvedBody: URLRequest {
+        guard request.httpBody == nil, let bodyStream = request.httpBodyStream else {
+            return request
+        }
+
+        var resolvedRequest = request
+        resolvedRequest.httpBody = Self.data(from: bodyStream)
+        return resolvedRequest
+    }
+
+    private static func data(from stream: InputStream) -> Data {
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1_024)
+
+        while stream.hasBytesAvailable {
+            let bytesRead = stream.read(&buffer, maxLength: buffer.count)
+            guard bytesRead > 0 else { break }
+            data.append(buffer, count: bytesRead)
+        }
+
+        return data
+    }
 }

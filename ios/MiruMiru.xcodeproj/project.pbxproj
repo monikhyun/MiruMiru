@@ -67,8 +67,8 @@
 		B0000000000000000000007D /* BoardsSyncStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000007E /* BoardsSyncStoreTests.swift */; };
 		B0000000000000000000007F /* PostDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000080 /* PostDetailViewModelTests.swift */; };
 		B00000000000000000000081 /* Messages/MessagesFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000082 /* Messages/MessagesFeature.swift */; };
-		B00000000000000000000083 /* Networking/RequestCacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000084 /* Networking/RequestCacheStore.swift */; };
 		B00000000000000000000085 /* UI/AuthenticatedLayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000086 /* UI/AuthenticatedLayoutMetrics.swift */; };
+		B00000000000000000000087 /* Networking/RequestCacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000088 /* Networking/RequestCacheStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -155,8 +155,8 @@
 		B0000000000000000000007E /* BoardsSyncStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardsSyncStoreTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000080 /* PostDetailViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostDetailViewModelTests.swift; sourceTree = "<group>"; };
 		B00000000000000000000082 /* Messages/MessagesFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Messages/MessagesFeature.swift; sourceTree = "<group>"; };
-		B00000000000000000000084 /* Networking/RequestCacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/RequestCacheStore.swift; sourceTree = "<group>"; };
 		B00000000000000000000086 /* UI/AuthenticatedLayoutMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UI/AuthenticatedLayoutMetrics.swift; sourceTree = "<group>"; };
+		B00000000000000000000088 /* Networking/RequestCacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Networking/RequestCacheStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -215,7 +215,7 @@
 				B00000000000000000000026 /* Auth/AuthErrors.swift */,
 				B00000000000000000000027 /* Auth/AuthErrorMapper.swift */,
 				B00000000000000000000028 /* Auth/AuthAPIClient.swift */,
-				B00000000000000000000084 /* Networking/RequestCacheStore.swift */,
+				B00000000000000000000088 /* Networking/RequestCacheStore.swift */,
 				B00000000000000000000029 /* Security/TokenStore.swift */,
 				B0000000000000000000002A /* Security/KeychainTokenStore.swift */,
 			);
@@ -498,7 +498,7 @@
 				B00000000000000000000056 /* Timetable/TimetableAPIClient.swift in Sources */,
 				B00000000000000000000057 /* Timetable/TimetableViewModel.swift in Sources */,
 				B00000000000000000000058 /* Timetable/TimetableView.swift in Sources */,
-				B00000000000000000000083 /* Networking/RequestCacheStore.swift in Sources */,
+				B00000000000000000000087 /* Networking/RequestCacheStore.swift in Sources */,
 				B00000000000000000000075 /* Boards/BoardsModels.swift in Sources */,
 				B00000000000000000000076 /* Boards/BoardsAPIClient.swift in Sources */,
 				B00000000000000000000077 /* Boards/BoardsFeature.swift in Sources */,
@@ -583,6 +583,7 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = MiruMiru;
 			};
 			name = Debug;
 		};
@@ -721,6 +722,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = MiruMiru;
 			};
 			name = Release;
 		};

@@ -100,6 +100,7 @@ final class CourseReviewsViewModelTests: XCTestCase {
             target: PreviewCourseReviewsData.target
         )
 
+        await viewModel.loadIfNeeded()
         viewModel.content = "Updated review text"
 
         let succeeded = await viewModel.submit()

@@ -37,9 +37,21 @@ final class PostDetailViewModelTests: XCTestCase {
             commentCount: 1,
             createdAt: detail.createdAt
         )
+        let refreshedHotPost = HotPostSummary(
+            id: hotPost.id,
+            boardId: hotPost.boardId,
+            boardCode: hotPost.boardCode,
+            boardName: hotPost.boardName,
+            title: hotPost.title,
+            authorDisplayName: hotPost.authorDisplayName,
+            isAnonymous: hotPost.isAnonymous,
+            likeCount: 5,
+            commentCount: hotPost.commentCount,
+            createdAt: hotPost.createdAt
+        )
 
         client.postDetailResult = .success(detail)
-        client.hotPostsResult = .success([hotPost])
+        client.hotPostsResult = .success([refreshedHotPost])
         store.ingestHotPosts([hotPost])
 
         let viewModel = PostDetailViewModel(client: client, syncStore: store, postId: detail.postId)

@@ -36,6 +36,20 @@ final class CourseReviewsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.visibleItems.map(\.target.courseCode), ["HIST120"])
     }
 
+    func testFeedViewModelKeepsClassAndProfessorRatingsSeparate() async {
+        let client = MockCourseReviewsClient()
+        client.feedResult = .success(PreviewCourseReviewsData.feedPage)
+
+        let viewModel = CourseReviewsFeedViewModel(client: client)
+        await viewModel.loadIfNeeded()
+
+        let first = viewModel.visibleItems[0]
+        XCTAssertEqual(first.overallRating, 10)
+        XCTAssertEqual(first.professorRating, 9)
+        XCTAssertEqual(first.content, "The professor's explanations are engaging, and you can build a solid foundation in economics. Exams are open-book and the pacing feels fair.")
+        XCTAssertEqual(first.professorContent, "Prof. Tanaka makes dense concepts feel approachable and keeps office hours useful.")
+    }
+
     func testDetailViewModelKeepsPageWhenMyReviewLookupFails() async {
         let client = MockCourseReviewsClient()
         client.detailResult = .success(PreviewCourseReviewsData.detailPage)
@@ -64,11 +78,13 @@ final class CourseReviewsViewModelTests: XCTestCase {
         )
 
         await viewModel.loadIfNeeded()
-        viewModel.overallRating = 4
+        viewModel.overallRating = 8
+        viewModel.professorRating = 9
         viewModel.difficultySelection = 3
         viewModel.workloadSelection = 1
         viewModel.wouldTakeAgain = true
         viewModel.content = "Helpful review"
+        viewModel.professorContent = "Clear professor"
         viewModel.academicYear = 2025
         viewModel.term = .fall
 
@@ -78,15 +94,17 @@ final class CourseReviewsViewModelTests: XCTestCase {
         XCTAssertEqual(client.createdTargetId, PreviewCourseReviewsData.target.targetId)
         XCTAssertEqual(
             client.createdPayload,
-            CourseReviewUpsertRequest(
-                academicYear: 2025,
-                term: "FALL",
-                overallRating: 4,
-                difficulty: 3,
-                workload: 1,
-                wouldTakeAgain: true,
-                content: "Helpful review"
-            )
+                CourseReviewUpsertRequest(
+                    academicYear: 2025,
+                    term: "FALL",
+                    overallRating: 8,
+                    professorRating: 9,
+                    difficulty: 3,
+                    workload: 1,
+                    wouldTakeAgain: true,
+                    content: "Helpful review",
+                    professorContent: "Clear professor"
+                )
         )
     }
 
@@ -100,12 +118,17 @@ final class CourseReviewsViewModelTests: XCTestCase {
             target: PreviewCourseReviewsData.target
         )
 
+        await viewModel.loadIfNeeded()
         viewModel.content = "Updated review text"
+        viewModel.professorContent = "Updated professor text"
 
         let succeeded = await viewModel.submit()
 
         XCTAssertTrue(succeeded)
         XCTAssertEqual(client.updatedTargetId, PreviewCourseReviewsData.target.targetId)
+        XCTAssertEqual(client.updatedPayload?.overallRating, 8)
+        XCTAssertEqual(client.updatedPayload?.professorRating, 9)
         XCTAssertEqual(client.updatedPayload?.content, "Updated review text")
+        XCTAssertEqual(client.updatedPayload?.professorContent, "Updated professor text")
     }
 }

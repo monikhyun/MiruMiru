@@ -7,10 +7,12 @@ object CourseReviewCommand {
         val academicYear: Int,
         val term: String,
         val overallRating: Int,
+        val professorRating: Int,
         val difficulty: Int,
         val workload: Int,
         val wouldTakeAgain: Boolean,
-        val content: String
+        val content: String,
+        val professorContent: String?
     )
 
     data class UpdateCourseReview(
@@ -19,10 +21,12 @@ object CourseReviewCommand {
         val academicYear: Int,
         val term: String,
         val overallRating: Int,
+        val professorRating: Int,
         val difficulty: Int,
         val workload: Int,
         val wouldTakeAgain: Boolean,
-        val content: String
+        val content: String,
+        val professorContent: String?
     )
 
     data class DeleteCourseReview(

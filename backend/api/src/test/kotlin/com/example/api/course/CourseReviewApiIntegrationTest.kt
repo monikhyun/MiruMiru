@@ -112,6 +112,7 @@ class CourseReviewApiIntegrationTest(
         assertTrue(response.contentAsString.contains("\"targetId\":$cs101ItoTargetId"))
         assertTrue(response.contentAsString.contains("\"reviewCount\":1"))
         assertTrue(response.contentAsString.contains("\"professorDisplayName\":\"Prof. Ito\""))
+        assertTrue(response.contentAsString.contains("\"averageProfessor\":"))
         assertTrue(response.contentAsString.contains("\"academicYear\":2025"))
     }
 
@@ -126,11 +127,13 @@ class CourseReviewApiIntegrationTest(
                 {
                   "academicYear": $currentYear,
                   "term": "SPRING",
-                  "overallRating": 4,
+                  "overallRating": 8,
+                  "professorRating": 9,
                   "difficulty": 2,
                   "workload": 3,
                   "wouldTakeAgain": true,
-                  "content": "  [test] good elective  "
+                  "content": "  [test] good elective  ",
+                  "professorContent": "  [test] clear professor  "
                 }
             """.trimIndent()
         }.andReturn().response
@@ -144,6 +147,8 @@ class CourseReviewApiIntegrationTest(
 
         assertEquals(200, myReviewResponse.status)
         assertTrue(myReviewResponse.contentAsString.contains("\"content\":\"[test] good elective\""))
+        assertTrue(myReviewResponse.contentAsString.contains("\"professorRating\":9"))
+        assertTrue(myReviewResponse.contentAsString.contains("\"professorContent\":\"[test] clear professor\""))
         assertTrue(myReviewResponse.contentAsString.contains("\"professorDisplayName\":\"Prof. Wilson\""))
 
         val updateResponse = mockMvc.put("/api/v1/course-review-targets/$eng220TargetId/reviews/me") {
@@ -153,11 +158,13 @@ class CourseReviewApiIntegrationTest(
                 {
                   "academicYear": ${currentYear - 1},
                   "term": "FALL",
-                  "overallRating": 5,
+                  "overallRating": 9,
+                  "professorRating": 8,
                   "difficulty": 3,
                   "workload": 4,
                   "wouldTakeAgain": false,
-                  "content": "[test] updated review"
+                  "content": "[test] updated review",
+                  "professorContent": "[test] updated professor"
                 }
             """.trimIndent()
         }.andReturn().response
@@ -173,6 +180,7 @@ class CourseReviewApiIntegrationTest(
         assertTrue(listResponse.contentAsString.contains("\"academicYear\":${currentYear - 1}"))
         assertTrue(listResponse.contentAsString.contains("\"term\":\"FALL\""))
         assertTrue(listResponse.contentAsString.contains("\"wouldTakeAgain\":false"))
+        assertTrue(listResponse.contentAsString.contains("\"professorRating\":8"))
 
         val deleteResponse = mockMvc.delete("/api/v1/course-review-targets/$eng220TargetId/reviews/me") {
             header(HttpHeaders.AUTHORIZATION, "Bearer $emptyAccessToken")
@@ -186,6 +194,55 @@ class CourseReviewApiIntegrationTest(
 
         assertEquals(404, missingResponse.status)
         assertTrue(missingResponse.contentAsString.contains("COURSE_002"))
+    }
+
+    @Test
+    fun `post target review rejects ratings outside ten point range`() {
+        val currentYear = java.time.LocalDate.now().year
+
+        val response = mockMvc.post("/api/v1/course-review-targets/$eng220TargetId/reviews") {
+            header(HttpHeaders.AUTHORIZATION, "Bearer $emptyAccessToken")
+            contentType = MediaType.APPLICATION_JSON
+            content = """
+                {
+                  "academicYear": $currentYear,
+                  "term": "SPRING",
+                  "overallRating": 11,
+                  "professorRating": 0,
+                  "difficulty": 3,
+                  "workload": 4,
+                  "wouldTakeAgain": true,
+                  "content": "[test] invalid review",
+                  "professorContent": null
+                }
+            """.trimIndent()
+        }.andReturn().response
+
+        assertEquals(400, response.status)
+    }
+
+    @Test
+    fun `post target review requires professor rating`() {
+        val currentYear = java.time.LocalDate.now().year
+
+        val response = mockMvc.post("/api/v1/course-review-targets/$eng220TargetId/reviews") {
+            header(HttpHeaders.AUTHORIZATION, "Bearer $emptyAccessToken")
+            contentType = MediaType.APPLICATION_JSON
+            content = """
+                {
+                  "academicYear": $currentYear,
+                  "term": "SPRING",
+                  "overallRating": 8,
+                  "difficulty": 3,
+                  "workload": 4,
+                  "wouldTakeAgain": true,
+                  "content": "[test] missing professor rating",
+                  "professorContent": null
+                }
+            """.trimIndent()
+        }.andReturn().response
+
+        assertEquals(400, response.status)
     }
 
     @Test

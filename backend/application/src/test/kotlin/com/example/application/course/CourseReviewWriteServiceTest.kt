@@ -46,6 +46,44 @@ class CourseReviewWriteServiceTest {
         val university = university()
         val member = member(id = 2L, university = university)
         val target = target(id = 10L, university = university, courseCode = "CS101", courseName = "Introduction to Computer Science", professorDisplayName = "Prof. Akiyama")
+        var savedReview: CourseReview? = null
+
+        `when`(memberRepository.findById(member.id)).thenReturn(Optional.of(member))
+        `when`(courseReviewTargetRepository.findByIdAndCourseUniversityId(target.id, university.id)).thenReturn(target)
+        `when`(courseReviewRepository.findByTargetIdAndMemberId(target.id, member.id)).thenReturn(null)
+        `when`(courseReviewRepository.save(any(CourseReview::class.java))).thenAnswer { invocation ->
+            (invocation.arguments.first() as CourseReview).also { savedReview = it }
+        }
+
+        val reviewId = courseReviewWriteService.createCourseReview(
+            CourseReviewCommand.CreateCourseReview(
+                userId = member.id.toString(),
+                targetId = target.id,
+                academicYear = LocalDate.now().year,
+                term = "SPRING",
+                overallRating = 10,
+                professorRating = 9,
+                difficulty = 4,
+                workload = 3,
+                wouldTakeAgain = true,
+                content = "  very helpful lecture  ",
+                professorContent = "  clear explanations  "
+            )
+        )
+
+        assertEquals(0L, reviewId)
+        assertEquals(10, savedReview?.overallRating)
+        assertEquals(9, savedReview?.professorRating)
+        assertEquals("very helpful lecture", savedReview?.content)
+        assertEquals("clear explanations", savedReview?.professorContent)
+        verify(courseReviewRepository).save(any(CourseReview::class.java))
+    }
+
+    @Test
+    fun `create review accepts ten point ratings while keeping characteristics five point`() {
+        val university = university()
+        val member = member(id = 2L, university = university)
+        val target = target(id = 10L, university = university, courseCode = "CS101", courseName = "Introduction to Computer Science", professorDisplayName = "Prof. Akiyama")
 
         `when`(memberRepository.findById(member.id)).thenReturn(Optional.of(member))
         `when`(courseReviewTargetRepository.findByIdAndCourseUniversityId(target.id, university.id)).thenReturn(target)
@@ -58,16 +96,77 @@ class CourseReviewWriteServiceTest {
                 targetId = target.id,
                 academicYear = LocalDate.now().year,
                 term = "SPRING",
-                overallRating = 5,
-                difficulty = 4,
-                workload = 3,
+                overallRating = 10,
+                professorRating = 10,
+                difficulty = 5,
+                workload = 5,
                 wouldTakeAgain = true,
-                content = "  very helpful lecture  "
+                content = "maximum valid scores",
+                professorContent = null
             )
         )
 
         assertEquals(0L, reviewId)
-        verify(courseReviewRepository).save(any(CourseReview::class.java))
+    }
+
+    @Test
+    fun `create review rejects out of range ten point ratings`() {
+        val university = university()
+        val member = member(id = 2L, university = university)
+        val target = target(id = 10L, university = university, courseCode = "CS101", courseName = "Introduction to Computer Science", professorDisplayName = "Prof. Akiyama")
+
+        `when`(memberRepository.findById(member.id)).thenReturn(Optional.of(member))
+        `when`(courseReviewTargetRepository.findByIdAndCourseUniversityId(target.id, university.id)).thenReturn(target)
+
+        val exception = assertThrows(BusinessException::class.java) {
+            courseReviewWriteService.createCourseReview(
+                CourseReviewCommand.CreateCourseReview(
+                    userId = member.id.toString(),
+                    targetId = target.id,
+                    academicYear = LocalDate.now().year,
+                    term = "SPRING",
+                    overallRating = 11,
+                    professorRating = 0,
+                    difficulty = 3,
+                    workload = 2,
+                    wouldTakeAgain = true,
+                    content = "invalid",
+                    professorContent = null
+                )
+            )
+        }
+
+        assertEquals(ErrorCode.INVALID_INPUT, exception.errorCode)
+    }
+
+    @Test
+    fun `create review rejects characteristic ratings outside five point range`() {
+        val university = university()
+        val member = member(id = 2L, university = university)
+        val target = target(id = 10L, university = university, courseCode = "CS101", courseName = "Introduction to Computer Science", professorDisplayName = "Prof. Akiyama")
+
+        `when`(memberRepository.findById(member.id)).thenReturn(Optional.of(member))
+        `when`(courseReviewTargetRepository.findByIdAndCourseUniversityId(target.id, university.id)).thenReturn(target)
+
+        val exception = assertThrows(BusinessException::class.java) {
+            courseReviewWriteService.createCourseReview(
+                CourseReviewCommand.CreateCourseReview(
+                    userId = member.id.toString(),
+                    targetId = target.id,
+                    academicYear = LocalDate.now().year,
+                    term = "SPRING",
+                    overallRating = 10,
+                    professorRating = 9,
+                    difficulty = 6,
+                    workload = 0,
+                    wouldTakeAgain = true,
+                    content = "invalid characteristics",
+                    professorContent = null
+                )
+            )
+        }
+
+        assertEquals(ErrorCode.INVALID_INPUT, exception.errorCode)
     }
 
     @Test
@@ -102,11 +201,13 @@ class CourseReviewWriteServiceTest {
                     targetId = target.id,
                     academicYear = LocalDate.now().year,
                     term = "SPRING",
-                    overallRating = 5,
+                    overallRating = 10,
+                    professorRating = 9,
                     difficulty = 4,
                     workload = 3,
                     wouldTakeAgain = true,
-                    content = "duplicate"
+                    content = "duplicate",
+                    professorContent = "duplicate professor note"
                 )
             )
         }
@@ -143,11 +244,13 @@ class CourseReviewWriteServiceTest {
                 targetId = target.id,
                 academicYear = 2025,
                 term = "SPRING",
-                overallRating = 5,
+                overallRating = 9,
+                professorRating = 8,
                 difficulty = 4,
                 workload = 4,
                 wouldTakeAgain = false,
-                content = "  updated content  "
+                content = "  updated content  ",
+                professorContent = "  updated professor note  "
             )
         )
 
@@ -155,6 +258,8 @@ class CourseReviewWriteServiceTest {
         assertEquals(2025, review.academicYear)
         assertEquals(SemesterTerm.SPRING, review.term)
         assertEquals("updated content", review.content)
+        assertEquals(8, review.professorRating)
+        assertEquals("updated professor note", review.professorContent)
         assertEquals(false, review.wouldTakeAgain)
     }
 
@@ -207,10 +312,12 @@ class CourseReviewWriteServiceTest {
                     academicYear = LocalDate.now().year,
                     term = "SPRING",
                     overallRating = 4,
+                    professorRating = 4,
                     difficulty = 3,
                     workload = 2,
                     wouldTakeAgain = true,
-                    content = "hello"
+                    content = "hello",
+                    professorContent = null
                 )
             )
         }
@@ -236,10 +343,12 @@ class CourseReviewWriteServiceTest {
                     academicYear = LocalDate.now().year - 40,
                     term = "SPRING",
                     overallRating = 4,
+                    professorRating = 4,
                     difficulty = 3,
                     workload = 2,
                     wouldTakeAgain = true,
-                    content = "hello"
+                    content = "hello",
+                    professorContent = null
                 )
             )
         }

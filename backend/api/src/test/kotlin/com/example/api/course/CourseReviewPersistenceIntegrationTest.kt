@@ -61,6 +61,9 @@ class CourseReviewPersistenceIntegrationTest(
         assertEquals(1, reviews.totalElements)
         assertEquals(2025, reviews.content.single().academicYear)
         assertEquals("Prof. Ito", reviews.content.single().professorDisplayName)
+        assertEquals(10, reviews.content.single().overallRating)
+        assertEquals(9, reviews.content.single().professorRating)
+        assertEquals("Prof. Ito explains concepts clearly and gives helpful feedback.", reviews.content.single().professorContent)
     }
 
     @Test

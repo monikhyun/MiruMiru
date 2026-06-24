@@ -164,19 +164,22 @@ class CourseReviewQueryServiceTest {
         `when`(courseReviewRepository.findAllByTargetId(target.id, pageable))
             .thenReturn(PageImpl(listOf(firstReview, secondReview), pageable, 2))
         `when`(courseReviewRepository.summarizeByTargetId(target.id))
-            .thenReturn(CourseReviewSummaryProjection(2, 4.44, 3.55, 2.49, 87.66))
+            .thenReturn(CourseReviewSummaryProjection(2, 8.44, 9.15, 3.55, 2.49, 87.66))
 
         val result = courseReviewQueryService.getCourseReviews(member.id.toString(), target.id, 0, 20)
 
         assertEquals(target.id, result.summary.targetId)
         assertEquals(target.course.id, result.summary.courseId)
         assertEquals("Prof. Akiyama", result.summary.professorDisplayName)
-        assertEquals(4.4, result.summary.averageOverall)
+        assertEquals(8.4, result.summary.averageOverall)
+        assertEquals(9.2, result.summary.averageProfessor)
         assertEquals(3.6, result.summary.averageDifficulty)
         assertEquals(2.5, result.summary.averageWorkload)
         assertEquals(87.7, result.summary.wouldTakeAgainRate)
         assertEquals(listOf(20L, 21L), result.reviews.map { it.reviewId })
         assertEquals(true, result.reviews.first().isMine)
+        assertEquals(8, result.reviews.first().professorRating)
+        assertEquals("Helpful office hours", result.reviews.first().professorContent)
     }
 
     @Test
@@ -189,16 +192,50 @@ class CourseReviewQueryServiceTest {
         `when`(memberRepository.findById(member.id)).thenReturn(Optional.of(member))
         `when`(courseReviewTargetRepository.findByIdAndCourseUniversityId(target.id, university.id)).thenReturn(target)
         `when`(courseReviewRepository.findAllByTargetId(target.id, pageable)).thenReturn(PageImpl(emptyList(), pageable, 0))
-        `when`(courseReviewRepository.summarizeByTargetId(target.id)).thenReturn(CourseReviewSummaryProjection(0, null, null, null, null))
+        `when`(courseReviewRepository.summarizeByTargetId(target.id)).thenReturn(CourseReviewSummaryProjection(0, null, null, null, null, null))
 
         val result = courseReviewQueryService.getCourseReviews(member.id.toString(), target.id, 0, 1)
 
         assertEquals(0, result.summary.reviewCount)
         assertNull(result.summary.averageOverall)
+        assertNull(result.summary.averageProfessor)
         assertNull(result.summary.averageDifficulty)
         assertNull(result.summary.averageWorkload)
         assertNull(result.summary.wouldTakeAgainRate)
         assertEquals(0, result.totalPages)
+    }
+
+    @Test
+    fun `get course reviews keeps legacy nullable professor fields readable`() {
+        val university = university()
+        val member = member(id = 2L, university = university)
+        val target = target(id = 10L, university = university, courseCode = "CS101", courseName = "Introduction to Computer Science", professorDisplayName = "Prof. Akiyama")
+        val pageable = PageRequest.of(0, 20, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))
+        val legacyReview = review(
+            id = 20L,
+            target = target,
+            member = member,
+            academicYear = 2024,
+            term = SemesterTerm.FALL,
+            content = "Legacy review",
+            professorRating = null,
+            professorContent = null,
+            createdAt = LocalDateTime.of(2026, 2, 1, 9, 0),
+            updatedAt = LocalDateTime.of(2026, 2, 1, 10, 0)
+        )
+
+        `when`(memberRepository.findById(member.id)).thenReturn(Optional.of(member))
+        `when`(courseReviewTargetRepository.findByIdAndCourseUniversityId(target.id, university.id)).thenReturn(target)
+        `when`(courseReviewRepository.findAllByTargetId(target.id, pageable))
+            .thenReturn(PageImpl(listOf(legacyReview), pageable, 1))
+        `when`(courseReviewRepository.summarizeByTargetId(target.id))
+            .thenReturn(CourseReviewSummaryProjection(1, 8.0, null, 3.0, 2.0, 100.0))
+
+        val result = courseReviewQueryService.getCourseReviews(member.id.toString(), target.id, 0, 20)
+
+        assertNull(result.reviews.single().professorRating)
+        assertNull(result.reviews.single().professorContent)
+        assertNull(result.summary.averageProfessor)
     }
 
     @Test
@@ -256,6 +293,8 @@ class CourseReviewQueryServiceTest {
         academicYear: Int,
         term: SemesterTerm,
         content: String,
+        professorRating: Int? = 8,
+        professorContent: String? = "Helpful office hours",
         createdAt: LocalDateTime,
         updatedAt: LocalDateTime
     ): CourseReview {
@@ -267,10 +306,12 @@ class CourseReviewQueryServiceTest {
             term = term,
             professorDisplayName = target.professorDisplayName,
             overallRating = 4,
+            professorRating = professorRating,
             difficulty = 3,
             workload = 2,
             wouldTakeAgain = true,
-            content = content
+            content = content,
+            professorContent = professorContent
         ).apply {
             this.createdAt = createdAt
             this.updatedAt = updatedAt

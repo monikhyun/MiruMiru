@@ -18,10 +18,12 @@ struct CourseReviewFeedItem: Identifiable, Equatable, Sendable {
     let reviewId: Int64
     let target: CourseReviewTargetRef
     let overallRating: Int
+    let professorRating: Int?
     let difficulty: Int
     let workload: Int
     let wouldTakeAgain: Bool
     let content: String
+    let professorContent: String?
     let academicYear: Int
     let term: String
     let isMine: Bool
@@ -44,6 +46,7 @@ struct CourseReviewSummary: Equatable, Sendable {
     let target: CourseReviewTargetRef
     let reviewCount: Int
     let averageOverall: Double?
+    let averageProfessor: Double?
     let averageDifficulty: Double?
     let averageWorkload: Double?
     let wouldTakeAgainRate: Double?
@@ -52,10 +55,12 @@ struct CourseReviewSummary: Equatable, Sendable {
 struct CourseReviewEntry: Identifiable, Equatable, Sendable {
     let reviewId: Int64
     let overallRating: Int
+    let professorRating: Int?
     let difficulty: Int
     let workload: Int
     let wouldTakeAgain: Bool
     let content: String
+    let professorContent: String?
     let academicYear: Int
     let term: String
     let professorDisplayName: String
@@ -80,10 +85,12 @@ struct CourseReviewUpsertRequest: Codable, Equatable, Sendable {
     let academicYear: Int
     let term: String
     let overallRating: Int
+    let professorRating: Int
     let difficulty: Int
     let workload: Int
     let wouldTakeAgain: Bool
     let content: String
+    let professorContent: String?
 }
 
 enum CourseReviewFeedFilter: CaseIterable, Equatable, Sendable {
@@ -396,10 +403,12 @@ private extension CourseReviewsAPIClient {
         let professorDisplayName: String
         let displayName: String
         let overallRating: Int
+        let professorRating: Int?
         let difficulty: Int
         let workload: Int
         let wouldTakeAgain: Bool
         let content: String
+        let professorContent: String?
         let academicYear: Int
         let term: String
         let isMine: Bool
@@ -418,10 +427,12 @@ private extension CourseReviewsAPIClient {
                     displayName: displayName
                 ),
                 overallRating: overallRating,
+                professorRating: professorRating,
                 difficulty: difficulty,
                 workload: workload,
                 wouldTakeAgain: wouldTakeAgain,
                 content: content,
+                professorContent: professorContent,
                 academicYear: academicYear,
                 term: term,
                 isMine: isMine,
@@ -502,6 +513,7 @@ private extension CourseReviewsAPIClient {
         let displayName: String
         let reviewCount: Int
         let averageOverall: Double?
+        let averageProfessor: Double?
         let averageDifficulty: Double?
         let averageWorkload: Double?
         let wouldTakeAgainRate: Double?
@@ -518,6 +530,7 @@ private extension CourseReviewsAPIClient {
                 ),
                 reviewCount: reviewCount,
                 averageOverall: averageOverall,
+                averageProfessor: averageProfessor,
                 averageDifficulty: averageDifficulty,
                 averageWorkload: averageWorkload,
                 wouldTakeAgainRate: wouldTakeAgainRate
@@ -528,10 +541,12 @@ private extension CourseReviewsAPIClient {
     struct ReviewItemResponse: Decodable {
         let reviewId: Int64
         let overallRating: Int
+        let professorRating: Int?
         let difficulty: Int
         let workload: Int
         let wouldTakeAgain: Bool
         let content: String
+        let professorContent: String?
         let academicYear: Int
         let term: String
         let professorDisplayName: String
@@ -543,10 +558,12 @@ private extension CourseReviewsAPIClient {
             CourseReviewEntry(
                 reviewId: reviewId,
                 overallRating: overallRating,
+                professorRating: professorRating,
                 difficulty: difficulty,
                 workload: workload,
                 wouldTakeAgain: wouldTakeAgain,
                 content: content,
+                professorContent: professorContent,
                 academicYear: academicYear,
                 term: term,
                 professorDisplayName: professorDisplayName,
@@ -600,7 +617,7 @@ final class CourseReviewsFeedViewModel: ObservableObject {
             case .major:
                 return item.academicCategory == .major
             case .highRating:
-                return item.overallRating >= 4
+                return item.overallRating >= 8
             }
         }
 
@@ -787,10 +804,12 @@ final class CourseReviewDetailViewModel: ObservableObject {
 @MainActor
 final class WriteReviewViewModel: ObservableObject {
     @Published var overallRating: Int = 0
+    @Published var professorRating: Int = 0
     @Published var difficultySelection: Int = 3
     @Published var workloadSelection: Int = 3
     @Published var wouldTakeAgain = false
     @Published var content = ""
+    @Published var professorContent = ""
     @Published var academicYear = Calendar.current.component(.year, from: Date())
     @Published var term: ReviewTerm = .spring
     @Published private(set) var existingReview: CourseReviewEntry?
@@ -816,12 +835,18 @@ final class WriteReviewViewModel: ObservableObject {
         "\(content.count) / 1000"
     }
 
+    var professorCharacterCountText: String {
+        "\(professorContent.count) / 1000"
+    }
+
     var submitTitle: String {
         isEditing ? "Update Review" : "Submit Review"
     }
 
     var isSubmitDisabled: Bool {
-        overallRating == 0 || content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        overallRating == 0 ||
+            professorRating == 0 ||
+            content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func loadIfNeeded() async {
@@ -845,10 +870,12 @@ final class WriteReviewViewModel: ObservableObject {
             academicYear: academicYear,
             term: term.rawValue,
             overallRating: overallRating,
+            professorRating: professorRating,
             difficulty: difficultySelection,
             workload: workloadSelection,
             wouldTakeAgain: wouldTakeAgain,
-            content: trimmedContent
+            content: trimmedContent,
+            professorContent: trimmedProfessorContent
         )
 
         do {
@@ -924,26 +951,35 @@ final class WriteReviewViewModel: ObservableObject {
 
     private func apply(review: CourseReviewEntry) {
         overallRating = review.overallRating
+        professorRating = review.professorRating ?? 0
         difficultySelection = review.difficulty
         workloadSelection = review.workload
         wouldTakeAgain = review.wouldTakeAgain
         content = review.content
+        professorContent = review.professorContent ?? ""
         academicYear = review.academicYear
         term = ReviewTerm(rawValue: review.term.uppercased()) ?? .spring
     }
 
     private func resetForm() {
         overallRating = 0
+        professorRating = 0
         difficultySelection = 3
         workloadSelection = 3
         wouldTakeAgain = false
         content = ""
+        professorContent = ""
         academicYear = Calendar.current.component(.year, from: Date())
         term = .spring
     }
 
     private var trimmedContent: String {
         content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedProfessorContent: String? {
+        let trimmed = professorContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func map(_ error: CourseReviewsClientError) -> CourseReviewsFailure {
@@ -1677,25 +1713,25 @@ private struct WriteReviewScreen: View {
 
     private var ratingSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("OVERALL RATING")
+            Text("RATINGS")
                 .font(AppFont.bold(13, relativeTo: .caption))
                 .tracking(2)
                 .foregroundStyle(AppTheme.textSecondary)
 
-            HStack(spacing: 12) {
-                ForEach(1...5, id: \.self) { value in
-                    Button {
-                        viewModel.overallRating = value
-                    } label: {
-                        Image(systemName: value <= viewModel.overallRating ? "star.fill" : "star.fill")
-                            .font(.system(size: 36, weight: .semibold))
-                            .foregroundStyle(value <= viewModel.overallRating ? AuthPalette.primaryStart : AppTheme.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
+            VStack(spacing: 18) {
+                ReviewStarRatingPicker(
+                    title: "Class",
+                    value: viewModel.overallRating,
+                    onSelect: { viewModel.overallRating = $0 }
+                )
+
+                ReviewStarRatingPicker(
+                    title: "Professor",
+                    value: viewModel.professorRating,
+                    onSelect: { viewModel.professorRating = $0 }
+                )
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 22)
+            .padding(18)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(AppTheme.surfaceSecondary)
@@ -1756,48 +1792,25 @@ private struct WriteReviewScreen: View {
     }
 
     private var feedbackSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("DETAILED FEEDBACK")
+        VStack(alignment: .leading, spacing: 18) {
+            Text("FEEDBACK")
                 .font(AppFont.bold(13, relativeTo: .caption))
                 .tracking(2)
                 .foregroundStyle(AppTheme.textSecondary)
 
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(AppTheme.surfaceSecondary)
+            ReviewTextEditorBox(
+                title: "Class Review",
+                text: $viewModel.content,
+                placeholder: "Write your class review here...",
+                countText: viewModel.characterCountText
+            )
 
-                TextEditor(text: $viewModel.content)
-                    .font(AppFont.medium(16, relativeTo: .body))
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-
-                if viewModel.content.isEmpty {
-                    Text("Write your detailed review here...")
-                        .font(AppFont.medium(16, relativeTo: .body))
-                        .foregroundStyle(AppTheme.textTertiary)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 24)
-                        .allowsHitTesting(false)
-                }
-
-                VStack {
-                    Spacer()
-
-                    HStack {
-                        Spacer()
-
-                        Text(viewModel.characterCountText)
-                            .font(AppFont.semibold(13, relativeTo: .caption))
-                            .foregroundStyle(AppTheme.textTertiary)
-                            .padding(.trailing, 18)
-                            .padding(.bottom, 18)
-                    }
-                }
-            }
-            .frame(height: 260)
+            ReviewTextEditorBox(
+                title: "Professor Review",
+                text: $viewModel.professorContent,
+                placeholder: "Write your professor review here...",
+                countText: viewModel.professorCharacterCountText
+            )
         }
     }
 
@@ -1860,15 +1873,10 @@ private struct CourseReviewFeedCard: View {
 
                 Spacer(minLength: 12)
 
-                HStack(spacing: 4) {
-                    Text(String(format: "%.1f", Double(item.overallRating)))
-                        .font(AppFont.extraBold(20, relativeTo: .title3))
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.10))
-                }
+                ReviewRatingPair(
+                    classRating: item.overallRating,
+                    professorRating: item.professorRating
+                )
             }
 
             FlowLayout(item.presentationTags, spacing: 10, lineSpacing: 10) { tag in
@@ -1942,8 +1950,9 @@ private struct ReviewSummaryCard: View {
                 .font(AppFont.medium(14, relativeTo: .headline))
                 .foregroundStyle(AppTheme.textSecondary)
 
-            HStack(spacing: 10) {
-                SummaryStat(title: "Overall", value: summary.averageOverall.flatMap { String(format: "%.1f", $0) } ?? "-")
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                SummaryStat(title: "Class", value: summary.averageOverall.flatMap { String(format: "%.1f", $0) } ?? "-")
+                SummaryStat(title: "Professor", value: summary.averageProfessor.flatMap { String(format: "%.1f", $0) } ?? "-")
                 SummaryStat(title: "Difficulty", value: summary.averageDifficulty.difficultySummaryText)
                 SummaryStat(title: "Workload", value: summary.averageWorkload.workloadSummaryText)
             }
@@ -1982,15 +1991,10 @@ private struct ReviewDetailCard: View {
 
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Text(String(review.overallRating))
-                        .font(AppFont.extraBold(16, relativeTo: .headline))
-                        .foregroundStyle(AppTheme.textPrimary)
-
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.10))
-                }
+                ReviewRatingPair(
+                    classRating: review.overallRating,
+                    professorRating: review.professorRating
+                )
             }
 
             FlowLayout(review.presentationTags, spacing: 10, lineSpacing: 10) { tag in
@@ -2001,6 +2005,25 @@ private struct ReviewDetailCard: View {
                 .font(AppFont.medium(15, relativeTo: .body))
                 .foregroundStyle(AppTheme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let professorContent = review.professorContent, professorContent.isEmpty == false {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Professor")
+                        .font(AppFont.bold(11, relativeTo: .caption))
+                        .tracking(1)
+                        .foregroundStyle(AppTheme.textSecondary)
+
+                    Text(professorContent)
+                        .font(AppFont.medium(15, relativeTo: .body))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(AppTheme.surfaceSecondary)
+                )
+            }
 
             HStack {
                 Text(verbatim: "\(review.term.titleText) \(review.academicYear)")
@@ -2128,6 +2151,98 @@ private struct ReviewsEmptyCard: View {
     }
 }
 
+private struct ReviewTextEditorBox: View {
+    let title: String
+    @Binding var text: String
+    let placeholder: String
+    let countText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(AppFont.semibold(14, relativeTo: .subheadline))
+                .foregroundStyle(AppTheme.textSecondary)
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.surfaceSecondary)
+
+                TextEditor(text: $text)
+                    .font(AppFont.medium(16, relativeTo: .body))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
+                    .accessibilityLabel(title)
+
+                if text.isEmpty {
+                    Text(placeholder)
+                        .font(AppFont.medium(16, relativeTo: .body))
+                        .foregroundStyle(AppTheme.textTertiary)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+                        .allowsHitTesting(false)
+                }
+
+                VStack {
+                    Spacer()
+
+                    HStack {
+                        Spacer()
+
+                        Text(countText)
+                            .font(AppFont.semibold(13, relativeTo: .caption))
+                            .foregroundStyle(AppTheme.textTertiary)
+                            .padding(.trailing, 18)
+                            .padding(.bottom, 18)
+                    }
+                }
+            }
+            .frame(height: 220)
+        }
+    }
+}
+
+private struct ReviewRatingPair: View {
+    let classRating: Int
+    let professorRating: Int?
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            ReviewRatingBadge(title: "Class", value: "\(classRating)")
+            ReviewRatingBadge(title: "Prof", value: professorRating.map { String($0) } ?? "-")
+        }
+    }
+}
+
+private struct ReviewRatingBadge: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(title)
+                .font(AppFont.bold(10, relativeTo: .caption))
+                .foregroundStyle(AppTheme.textSecondary)
+
+            Text(value)
+                .font(AppFont.extraBold(15, relativeTo: .headline))
+                .foregroundStyle(AppTheme.textPrimary)
+
+            Image(systemName: "star.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Color(red: 0.98, green: 0.75, blue: 0.10))
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(
+            Capsule(style: .continuous)
+                .fill(AppTheme.surfaceSecondary)
+        )
+    }
+}
+
 private struct SummaryStat: View {
     let title: String
     let value: String
@@ -2170,6 +2285,46 @@ private struct ReviewTagChip: View {
                 Capsule(style: .continuous)
                     .fill(tag.backgroundColor)
             )
+    }
+}
+
+private struct ReviewStarRatingPicker: View {
+    let title: String
+    let value: Int
+    let onSelect: (Int) -> Void
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 5)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(AppFont.semibold(14, relativeTo: .subheadline))
+                    .foregroundStyle(AppTheme.textSecondary)
+
+                Spacer()
+
+                Text(value == 0 ? "-" : "\(value)")
+                    .font(AppFont.extraBold(16, relativeTo: .headline))
+                    .foregroundStyle(AuthPalette.primaryStart)
+            }
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(1...10, id: \.self) { score in
+                    Button {
+                        onSelect(score)
+                    } label: {
+                        Image(systemName: score <= value ? "star.fill" : "star")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(score <= value ? AuthPalette.primaryStart : AppTheme.textTertiary)
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(title) rating \(score) of 10")
+                    .accessibilityValue(score <= value ? "Selected" : "Not selected")
+                }
+            }
+        }
     }
 }
 
@@ -2614,11 +2769,13 @@ enum PreviewCourseReviewsData {
                     professorDisplayName: "Prof. Kenichi Tanaka",
                     displayName: "Microeconomics I: Prof. Kenichi Tanaka"
                 ),
-                overallRating: 5,
+                overallRating: 10,
+                professorRating: 9,
                 difficulty: 2,
                 workload: 2,
                 wouldTakeAgain: true,
                 content: "The professor's explanations are engaging, and you can build a solid foundation in economics. Exams are open-book and the pacing feels fair.",
+                professorContent: "Prof. Tanaka makes dense concepts feel approachable and keeps office hours useful.",
                 academicYear: 2023,
                 term: "SPRING",
                 isMine: false,
@@ -2635,11 +2792,13 @@ enum PreviewCourseReviewsData {
                     professorDisplayName: "Prof. Yuko Sato",
                     displayName: "Intro to Japanese History: Prof. Yuko Sato"
                 ),
-                overallRating: 3,
+                overallRating: 6,
+                professorRating: 7,
                 difficulty: 4,
                 workload: 5,
                 wouldTakeAgain: false,
                 content: "There is a short report due every class. The content is interesting, but the workload is high and you should consider your semester balance.",
+                professorContent: "Prof. Sato gives detailed context, though the pace can feel demanding.",
                 academicYear: 2023,
                 term: "FALL",
                 isMine: false,
@@ -2656,11 +2815,13 @@ enum PreviewCourseReviewsData {
                     professorDisplayName: "Prof. Ichiro Suzuki",
                     displayName: "Foundations of CS: Prof. Ichiro Suzuki"
                 ),
-                overallRating: 4,
+                overallRating: 8,
+                professorRating: nil,
                 difficulty: 3,
                 workload: 2,
                 wouldTakeAgain: true,
                 content: "The professor teaches kindly even for those with no programming experience. TAs are also friendly, making it a good first technical course.",
+                professorContent: nil,
                 academicYear: 2023,
                 term: "SPRING",
                 isMine: false,
@@ -2677,11 +2838,13 @@ enum PreviewCourseReviewsData {
 
     static let myReview = CourseReviewEntry(
         reviewId: 201,
-        overallRating: 4,
+        overallRating: 8,
+        professorRating: 9,
         difficulty: 3,
         workload: 2,
         wouldTakeAgain: true,
         content: "Well structured lectures and fair grading. I would take it again.",
+        professorContent: "The professor explains tradeoffs clearly and responds quickly to questions.",
         academicYear: 2025,
         term: "SPRING",
         professorDisplayName: target.professorDisplayName,
@@ -2694,7 +2857,8 @@ enum PreviewCourseReviewsData {
         summary: CourseReviewSummary(
             target: target,
             reviewCount: 12,
-            averageOverall: 4.3,
+            averageOverall: 8.6,
+            averageProfessor: 9.1,
             averageDifficulty: 3.2,
             averageWorkload: 2.8,
             wouldTakeAgainRate: 81.0
@@ -2703,11 +2867,13 @@ enum PreviewCourseReviewsData {
             myReview,
             CourseReviewEntry(
                 reviewId: 202,
-                overallRating: 5,
+                overallRating: 10,
+                professorRating: 10,
                 difficulty: 2,
                 workload: 3,
                 wouldTakeAgain: true,
                 content: "Great for building intuition before advanced macro. The examples are practical and easy to follow.",
+                professorContent: "Lectures are calm, organized, and easy to revisit before exams.",
                 academicYear: 2024,
                 term: "FALL",
                 professorDisplayName: target.professorDisplayName,

@@ -21,6 +21,7 @@ interface CourseReviewRepository : JpaRepository<CourseReview, Long> {
         select new com.example.domain.course.CourseReviewSummaryProjection(
             count(review),
             avg(review.overallRating),
+            avg(review.professorRating),
             avg(review.difficulty),
             avg(review.workload),
             avg(case when review.wouldTakeAgain = true then 100.0 else 0.0 end)

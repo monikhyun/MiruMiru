@@ -300,7 +300,9 @@ class LocalTestDataInitializer(
                     difficulty = seed.difficulty,
                     workload = seed.workload,
                     wouldTakeAgain = seed.wouldTakeAgain,
-                    content = seed.content
+                    content = seed.content,
+                    professorRating = seed.professorRating,
+                    professorContent = seed.professorContent
                 )
             )
     }
@@ -751,11 +753,13 @@ class LocalTestDataInitializer(
                 professorDisplayName = "Prof. Ito",
                 academicYear = 2025,
                 term = SemesterTerm.FALL,
-                overallRating = 5,
+                overallRating = 10,
+                professorRating = 9,
                 difficulty = 3,
                 workload = 2,
                 wouldTakeAgain = true,
-                content = "Clear explanations and manageable assignments."
+                content = "Clear explanations and manageable assignments.",
+                professorContent = "Prof. Ito explains concepts clearly and gives helpful feedback."
             ),
             CourseReviewSeed(
                 memberEmail = EMPTY_MEMBER_EMAIL,
@@ -763,11 +767,13 @@ class LocalTestDataInitializer(
                 professorDisplayName = "Prof. Akiyama",
                 academicYear = 2026,
                 term = SemesterTerm.SPRING,
-                overallRating = 4,
+                overallRating = 8,
+                professorRating = 8,
                 difficulty = 4,
                 workload = 3,
                 wouldTakeAgain = true,
-                content = "Fast-paced but still one of the better core classes."
+                content = "Fast-paced but still one of the better core classes.",
+                professorContent = "Prof. Akiyama keeps the class moving and answers questions directly."
             )
         )
     }
@@ -851,10 +857,12 @@ class LocalTestDataInitializer(
         val academicYear: Int,
         val term: SemesterTerm,
         val overallRating: Int,
+        val professorRating: Int,
         val difficulty: Int,
         val workload: Int,
         val wouldTakeAgain: Boolean,
-        val content: String
+        val content: String,
+        val professorContent: String?
     )
 
     private data class SemesterKey(

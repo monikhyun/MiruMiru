@@ -39,6 +39,72 @@ PREPARE chat_block_pair_stmt FROM @chat_block_pair_migration_sql;
 EXECUTE chat_block_pair_stmt;
 DEALLOCATE PREPARE chat_block_pair_stmt;
 
+CREATE TABLE IF NOT EXISTS schema_migration_marker (
+    id VARCHAR(100) NOT NULL,
+    applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id)
+);
+
+SET @course_review_table_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.tables
+    WHERE table_schema = DATABASE()
+      AND table_name = 'course_review'
+);
+
+SET @course_review_professor_rating_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'course_review'
+      AND column_name = 'professor_rating'
+);
+
+SET @course_review_professor_rating_sql := IF(
+    @course_review_table_exists > 0 AND @course_review_professor_rating_exists = 0,
+    'ALTER TABLE course_review ADD COLUMN professor_rating INT NULL',
+    'SELECT 1'
+);
+PREPARE course_review_professor_rating_stmt FROM @course_review_professor_rating_sql;
+EXECUTE course_review_professor_rating_stmt;
+DEALLOCATE PREPARE course_review_professor_rating_stmt;
+
+SET @course_review_professor_content_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'course_review'
+      AND column_name = 'professor_content'
+);
+
+SET @course_review_professor_content_sql := IF(
+    @course_review_table_exists > 0 AND @course_review_professor_content_exists = 0,
+    'ALTER TABLE course_review ADD COLUMN professor_content TEXT NULL',
+    'SELECT 1'
+);
+PREPARE course_review_professor_content_stmt FROM @course_review_professor_content_sql;
+EXECUTE course_review_professor_content_stmt;
+DEALLOCATE PREPARE course_review_professor_content_stmt;
+
+SET @course_review_rating_scale_migrated := (
+    SELECT COUNT(*)
+    FROM schema_migration_marker
+    WHERE id = '20260620_course_review_rating_10_scale'
+);
+
+SET @course_review_rating_scale_sql := IF(
+    @course_review_table_exists > 0 AND @course_review_rating_scale_migrated = 0,
+    'UPDATE course_review SET overall_rating = overall_rating * 2 WHERE overall_rating BETWEEN 1 AND 5',
+    'SELECT 1'
+);
+PREPARE course_review_rating_scale_stmt FROM @course_review_rating_scale_sql;
+EXECUTE course_review_rating_scale_stmt;
+DEALLOCATE PREPARE course_review_rating_scale_stmt;
+
+INSERT IGNORE INTO schema_migration_marker (id)
+SELECT '20260620_course_review_rating_10_scale'
+WHERE @course_review_table_exists > 0;
+
 CREATE TABLE IF NOT EXISTS chat_report (
     id BIGINT NOT NULL AUTO_INCREMENT,
     reporter_id BIGINT NOT NULL,

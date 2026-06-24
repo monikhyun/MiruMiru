@@ -70,10 +70,12 @@ class CourseReviewController(
                 academicYear = request.academicYear!!,
                 term = request.term,
                 overallRating = request.overallRating!!,
+                professorRating = request.professorRating!!,
                 difficulty = request.difficulty!!,
                 workload = request.workload!!,
                 wouldTakeAgain = request.wouldTakeAgain!!,
-                content = request.content
+                content = request.content,
+                professorContent = request.professorContent
             )
         )
         return ResponseEntity
@@ -94,10 +96,12 @@ class CourseReviewController(
                 academicYear = request.academicYear!!,
                 term = request.term,
                 overallRating = request.overallRating!!,
+                professorRating = request.professorRating!!,
                 difficulty = request.difficulty!!,
                 workload = request.workload!!,
                 wouldTakeAgain = request.wouldTakeAgain!!,
-                content = request.content
+                content = request.content,
+                professorContent = request.professorContent
             )
         )
         return ResponseEntity.ok(ApiResponse.ok(CourseReviewResponses.CourseReviewIdResponse(reviewId)))

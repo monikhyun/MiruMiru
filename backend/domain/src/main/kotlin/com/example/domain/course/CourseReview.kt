@@ -66,7 +66,13 @@ class CourseReview(
     var wouldTakeAgain: Boolean,
 
     @Column(nullable = false, columnDefinition = "TEXT")
-    var content: String
+    var content: String,
+
+    @Column(name = "professor_rating")
+    var professorRating: Int? = null,
+
+    @Column(name = "professor_content", columnDefinition = "TEXT")
+    var professorContent: String? = null
 ) : BaseTimeEntity() {
     fun update(
         academicYear: Int,
@@ -76,7 +82,9 @@ class CourseReview(
         difficulty: Int,
         workload: Int,
         wouldTakeAgain: Boolean,
-        content: String
+        content: String,
+        professorRating: Int?,
+        professorContent: String?
     ) {
         this.academicYear = academicYear
         this.term = term
@@ -86,5 +94,7 @@ class CourseReview(
         this.workload = workload
         this.wouldTakeAgain = wouldTakeAgain
         this.content = content
+        this.professorRating = professorRating
+        this.professorContent = professorContent
     }
 }

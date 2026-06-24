@@ -26,9 +26,10 @@ class CourseReviewWriteService(
         val target = findTarget(member, command.targetId)
         val term = parseTerm(command.term)
         validateAcademicYear(command.academicYear)
-        validateRatings(command.overallRating, command.difficulty, command.workload)
+        validateRatings(command.overallRating, command.professorRating, command.difficulty, command.workload)
         val content = command.content.trim()
         validateContent(content)
+        val professorContent = command.professorContent.cleanedOptional()
 
         if (courseReviewRepository.findByTargetIdAndMemberId(target.id, member.id) != null) {
             throw BusinessException(ErrorCode.COURSE_REVIEW_ALREADY_EXISTS)
@@ -46,7 +47,9 @@ class CourseReviewWriteService(
                     difficulty = command.difficulty,
                     workload = command.workload,
                     wouldTakeAgain = command.wouldTakeAgain,
-                    content = content
+                    content = content,
+                    professorRating = command.professorRating,
+                    professorContent = professorContent
                 )
             ).id
         } catch (_: DataIntegrityViolationException) {
@@ -59,9 +62,10 @@ class CourseReviewWriteService(
         val target = findTarget(member, command.targetId)
         val term = parseTerm(command.term)
         validateAcademicYear(command.academicYear)
-        validateRatings(command.overallRating, command.difficulty, command.workload)
+        validateRatings(command.overallRating, command.professorRating, command.difficulty, command.workload)
         val content = command.content.trim()
         validateContent(content)
+        val professorContent = command.professorContent.cleanedOptional()
 
         val review = courseReviewRepository.findByTargetIdAndMemberId(target.id, member.id)
             ?: throw BusinessException(ErrorCode.COURSE_REVIEW_NOT_FOUND)
@@ -74,7 +78,9 @@ class CourseReviewWriteService(
             difficulty = command.difficulty,
             workload = command.workload,
             wouldTakeAgain = command.wouldTakeAgain,
-            content = content
+            content = content,
+            professorRating = command.professorRating,
+            professorContent = professorContent
         )
 
         return review.id
@@ -89,8 +95,12 @@ class CourseReviewWriteService(
         courseReviewRepository.delete(review)
     }
 
-    private fun validateRatings(overallRating: Int, difficulty: Int, workload: Int) {
-        if (overallRating !in MIN_RATING..MAX_RATING || difficulty !in MIN_RATING..MAX_RATING || workload !in MIN_RATING..MAX_RATING) {
+    private fun validateRatings(overallRating: Int, professorRating: Int, difficulty: Int, workload: Int) {
+        if (overallRating !in MIN_RATING..MAX_COURSE_RATING ||
+            professorRating !in MIN_RATING..MAX_COURSE_RATING ||
+            difficulty !in MIN_RATING..MAX_CHARACTERISTIC_RATING ||
+            workload !in MIN_RATING..MAX_CHARACTERISTIC_RATING
+        ) {
             throw BusinessException(ErrorCode.INVALID_INPUT)
         }
     }
@@ -113,6 +123,10 @@ class CourseReviewWriteService(
             .getOrElse { throw BusinessException(ErrorCode.INVALID_INPUT) }
     }
 
+    private fun String?.cleanedOptional(): String? {
+        return this?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     private fun findMember(userId: String): Member {
         val parsedUserId = userId.toLongOrNull()
             ?: throw BusinessException(ErrorCode.UNAUTHORIZED)
@@ -129,7 +143,8 @@ class CourseReviewWriteService(
 
     companion object {
         private const val MIN_RATING = 1
-        private const val MAX_RATING = 5
+        private const val MAX_COURSE_RATING = 10
+        private const val MAX_CHARACTERISTIC_RATING = 5
         private const val YEAR_LOOKBACK_RANGE = 30
         private const val FUTURE_YEAR_ALLOWANCE = 1
     }

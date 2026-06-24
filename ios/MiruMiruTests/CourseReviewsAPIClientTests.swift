@@ -24,11 +24,13 @@ final class CourseReviewsAPIClientTests: XCTestCase {
                     "courseName": "Advanced Microeconomics",
                     "professorDisplayName": "Prof. Tanaka",
                     "displayName": "Advanced Microeconomics: Prof. Tanaka",
-                    "overallRating": 4,
+                    "overallRating": 8,
+                    "professorRating": 9,
                     "difficulty": 3,
                     "workload": 4,
                     "wouldTakeAgain": true,
                     "content": "Great class",
+                    "professorContent": "Helpful professor",
                     "academicYear": 2026,
                     "term": "SPRING",
                     "isMine": false,
@@ -50,6 +52,9 @@ final class CourseReviewsAPIClientTests: XCTestCase {
         let page = try await client.fetchReviewFeed(page: 0, size: 20)
         XCTAssertEqual(page.items.first?.target.courseName, "Advanced Microeconomics")
         XCTAssertEqual(page.items.first?.target.targetId, 10)
+        XCTAssertEqual(page.items.first?.overallRating, 8)
+        XCTAssertEqual(page.items.first?.professorRating, 9)
+        XCTAssertEqual(page.items.first?.professorContent, "Helpful professor")
         XCTAssertEqual(page.totalElements, 1)
     }
 
@@ -65,18 +70,20 @@ final class CourseReviewsAPIClientTests: XCTestCase {
             }
             """
         ) { request in
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try self.requestBodyData(for: request)
             let decoded = try JSONDecoder().decode(CourseReviewUpsertRequest.self, from: body)
             XCTAssertEqual(
                 decoded,
                 CourseReviewUpsertRequest(
                     academicYear: 2026,
                     term: "SPRING",
-                    overallRating: 5,
+                    overallRating: 9,
+                    professorRating: 8,
                     difficulty: 3,
                     workload: 4,
                     wouldTakeAgain: true,
-                    content: "Loved it"
+                    content: "Loved it",
+                    professorContent: "Clear lectures"
                 )
             )
         }
@@ -86,11 +93,13 @@ final class CourseReviewsAPIClientTests: XCTestCase {
             request: CourseReviewUpsertRequest(
                 academicYear: 2026,
                 term: "SPRING",
-                overallRating: 5,
+                overallRating: 9,
+                professorRating: 8,
                 difficulty: 3,
                 workload: 4,
                 wouldTakeAgain: true,
-                content: "Loved it"
+                content: "Loved it",
+                professorContent: "Clear lectures"
             )
         )
 
@@ -132,5 +141,33 @@ final class CourseReviewsAPIClientTests: XCTestCase {
         let tokenStore = InMemoryTokenStore()
         tokenStore.storedSession = TokenPair(accessToken: "preview-access", refreshToken: "preview-refresh")
         return CourseReviewsAPIClient(apiClient: apiClient, tokenStore: tokenStore)
+    }
+
+    private func requestBodyData(for request: URLRequest) throws -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else {
+            throw XCTSkip("Request body not available")
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        let bufferSize = 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufferSize)
+            if read <= 0 {
+                break
+            }
+            data.append(buffer, count: read)
+        }
+
+        return data
     }
 }

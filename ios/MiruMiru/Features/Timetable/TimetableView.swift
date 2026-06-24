@@ -54,6 +54,7 @@ struct TimetableView: View {
             .sheet(isPresented: $isCatalogPresented, onDismiss: resetCatalogPresentation) {
                 TimetableCatalogSheet(
                     lectures: viewModel.filteredCatalog(query: searchQuery, filter: selectedFilter),
+                    filters: viewModel.availableCatalogFilters,
                     filter: $selectedFilter,
                     query: $searchQuery,
                     memberContext: currentMemberContext,
@@ -101,6 +102,14 @@ struct TimetableView: View {
                     onPrimaryAction: {
                         selectedLecture = nil
                         Task { await viewModel.removeLecture(lecture.id) }
+                    },
+                    colorOptions: viewModel.customColorOptions(for: lecture.id),
+                    selectedColorIndex: viewModel.customColorIndex(for: lecture.id),
+                    onSelectColor: { colorIndex in
+                        _ = viewModel.setCustomColorIndex(colorIndex, for: lecture.id)
+                    },
+                    onClearColor: {
+                        viewModel.clearCustomColorIndex(for: lecture.id)
                     }
                 )
                 .presentationDetents([.fraction(0.92), .large])
@@ -205,6 +214,7 @@ struct TimetableView: View {
             TimetableGridSection(
                 hourRange: content.hourRange,
                 blocks: [],
+                markers: content.markers,
                 overlay: AnyView(
                     TimetableEmptyOverlay(
                         title: content.state.title,
@@ -220,6 +230,7 @@ struct TimetableView: View {
             TimetableGridSection(
                 hourRange: content.hourRange,
                 blocks: content.blocks,
+                markers: content.markers,
                 overlay: nil,
                 onTapBlock: { block in
                     if let lecture = currentTimetableLecture(id: block.lectureId) {
@@ -305,6 +316,7 @@ struct TimetableView: View {
 private struct TimetableGridSection: View {
     let hourRange: TimetableHourRange
     let blocks: [TimetableGridBlock]
+    let markers: [TimetableGridMarker]
     let overlay: AnyView?
     let onTapBlock: (TimetableGridBlock) -> Void
 
@@ -355,8 +367,24 @@ private struct TimetableGridSection: View {
                         }
                     }
 
+                    ForEach(markers) { marker in
+                        TimetableGridMarkerRow(marker: marker)
+                            .frame(
+                                width: gridWidth,
+                                height: markerHeight(for: marker, trackHeight: trackHeight)
+                            )
+                            .offset(
+                                y: markerOffset(for: marker, trackHeight: trackHeight, rangeStartHour: hourRange.startHour)
+                            )
+                    }
+
                     ForEach(blocks) { block in
-                        TimetableLectureBlock(block: block)
+                        Button {
+                            onTapBlock(block)
+                        } label: {
+                            TimetableLectureBlock(block: block)
+                        }
+                        .buttonStyle(.plain)
                             .frame(
                                 width: dayColumnWidth,
                                 height: blockHeight(for: block, trackHeight: trackHeight)
@@ -365,9 +393,8 @@ private struct TimetableGridSection: View {
                                 x: CGFloat(block.dayIndex) * (dayColumnWidth + columnSpacing),
                                 y: blockOffset(for: block, trackHeight: trackHeight, rangeStartHour: hourRange.startHour)
                             )
-                            .onTapGesture {
-                                onTapBlock(block)
-                            }
+                            .accessibilityLabel(accessibilityLabel(for: block))
+                            .accessibilityHint("Opens course details")
                     }
 
                     if let overlay {
@@ -376,6 +403,7 @@ private struct TimetableGridSection: View {
                     }
                 }
                 .frame(width: gridWidth, height: totalHeight, alignment: .topLeading)
+                .clipped()
             }
         }
         .frame(height: (CGFloat(hourRange.hours.count) * (rowHeight + rowSpacing)) - rowSpacing)
@@ -395,55 +423,106 @@ private struct TimetableGridSection: View {
         let duration = CGFloat(block.endMinutes - block.startMinutes) / 60.0
         return max(rowHeight, (duration * trackHeight) - rowSpacing)
     }
+
+    private func accessibilityLabel(for block: TimetableGridBlock) -> String {
+        "\(block.title), \(block.professor), \(block.location)"
+    }
+
+    private func markerOffset(for marker: TimetableGridMarker, trackHeight: CGFloat, rangeStartHour: Int) -> CGFloat {
+        let rangeStartMinutes = rangeStartHour * 60
+        let delta = marker.startMinutes - rangeStartMinutes
+        return max(0, (CGFloat(delta) / 60.0) * trackHeight)
+    }
+
+    private func markerHeight(for marker: TimetableGridMarker, trackHeight: CGFloat) -> CGFloat {
+        let duration = CGFloat(marker.endMinutes - marker.startMinutes) / 60.0
+        return max(34, (duration * trackHeight) - rowSpacing)
+    }
+}
+
+private struct TimetableGridMarkerRow: View {
+    let marker: TimetableGridMarker
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Color.orange.opacity(colorScheme == .dark ? 0.20 : 0.12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        Color.orange.opacity(colorScheme == .dark ? 0.58 : 0.42),
+                        style: StrokeStyle(lineWidth: 1, dash: [6, 4])
+                    )
+            }
+            .overlay(alignment: .leading) {
+                Text(marker.title)
+                    .font(AppFont.bold(11, relativeTo: .caption2))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+            }
+            .allowsHitTesting(false)
+    }
 }
 
 private struct TimetableLectureBlock: View {
     let block: TimetableGridBlock
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let palette = TimetablePalette.token(for: block.accentIndex)
+        let palette = TimetablePalette.token(for: block.accentIndex, colorScheme: colorScheme)
         let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
 
-        ZStack(alignment: .leading) {
-            cardShape
-                .fill(palette.accent.opacity(0.95))
+        cardShape
+            .fill(
+                LinearGradient(
+                    colors: palette.gradientColors,
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .overlay {
+                cardShape
+                    .strokeBorder(palette.border, lineWidth: 1.35)
+            }
+            .overlay {
+                cardShape
+                    .inset(by: 1.4)
+                    .strokeBorder(palette.innerHighlight, lineWidth: 0.65)
+            }
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(palette.accent.opacity(colorScheme == .dark ? 0.58 : 0.68))
+                    .frame(width: 4)
+                    .padding(.leading, 6)
+                    .padding(.vertical, 8)
+            }
+            .overlay(alignment: .leading) {
+                HStack(spacing: 0) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(block.title)
+                            .font(AppFont.bold(12, relativeTo: .subheadline))
+                            .foregroundStyle(palette.title)
+                            .lineLimit(2)
 
-            cardShape
-                .fill(palette.fill)
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            palette.accent.opacity(0.10),
-                            palette.accent.opacity(0.03),
-                            .clear
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .clipShape(cardShape)
-                }
-                .padding(.leading, 4)
-                .overlay(alignment: .leading) {
-                    HStack(spacing: 0) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(block.title)
-                                .font(AppFont.bold(12, relativeTo: .subheadline))
-                                .foregroundStyle(palette.title)
-                                .lineLimit(3)
+                        Text(block.professor)
+                            .font(AppFont.semibold(10, relativeTo: .caption2))
+                            .foregroundStyle(palette.subtitle)
+                            .lineLimit(1)
 
-                            Text(block.location)
-                                .font(AppFont.medium(10, relativeTo: .caption2))
-                                .foregroundStyle(AppTheme.textSecondary)
-                                .lineLimit(2)
-                        }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 8)
-
-                        Spacer(minLength: 0)
+                        Text(block.location)
+                            .font(AppFont.medium(10, relativeTo: .caption2))
+                            .foregroundStyle(palette.caption)
+                            .lineLimit(2)
                     }
-                    .padding(.leading, 3)
+                    .padding(.leading, 18)
+                    .padding(.trailing, 9)
+                    .padding(.vertical, 8)
+
+                    Spacer(minLength: 0)
                 }
-        }
+            }
+            .shadow(color: palette.edgeShadow, radius: 3, x: 0, y: 1)
         .contentShape(Rectangle())
     }
 }
@@ -455,14 +534,50 @@ private struct TimetableLectureDetailSheet: View {
     let primaryActionConfirmationTitle: String?
     let onClose: () -> Void
     let onPrimaryAction: () -> Void
+    let colorOptions: [TimetableColorPickerOption]
+    let selectedColorIndex: Int?
+    let onSelectColor: ((Int) -> Void)?
+    let onClearColor: (() -> Void)?
 
     @State private var isShowingPrimaryActionConfirmation = false
+
+    init(
+        lecture: TimetableLectureItem,
+        primaryActionTitle: String,
+        primaryActionColor: Color,
+        primaryActionConfirmationTitle: String?,
+        onClose: @escaping () -> Void,
+        onPrimaryAction: @escaping () -> Void,
+        colorOptions: [TimetableColorPickerOption] = [],
+        selectedColorIndex: Int? = nil,
+        onSelectColor: ((Int) -> Void)? = nil,
+        onClearColor: (() -> Void)? = nil
+    ) {
+        self.lecture = lecture
+        self.primaryActionTitle = primaryActionTitle
+        self.primaryActionColor = primaryActionColor
+        self.primaryActionConfirmationTitle = primaryActionConfirmationTitle
+        self.onClose = onClose
+        self.onPrimaryAction = onPrimaryAction
+        self.colorOptions = colorOptions
+        self.selectedColorIndex = selectedColorIndex
+        self.onSelectColor = onSelectColor
+        self.onClearColor = onClearColor
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 24) {
                 TimetableDetailSheetTopBar(onClose: onClose)
                 TimetableDetailHeroSection(lecture: lecture)
+                if colorOptions.isEmpty == false {
+                    TimetableColorPickerSection(
+                        options: colorOptions,
+                        selectedColorIndex: selectedColorIndex,
+                        onSelectColor: onSelectColor,
+                        onClearColor: onClearColor
+                    )
+                }
                 TimetableDetailMetricsGrid(lecture: lecture)
                 TimetableDetailMetaSection(lecture: lecture)
                 TimetableDetailLocationPanel(lecture: lecture)
@@ -581,6 +696,93 @@ private struct TimetableDetailHeroSection: View {
                 .font(AppFont.medium(18, relativeTo: .title3))
                 .foregroundStyle(AppTheme.textSecondary)
         }
+    }
+}
+
+private struct TimetableColorPickerSection: View {
+    let options: [TimetableColorPickerOption]
+    let selectedColorIndex: Int?
+    let onSelectColor: ((Int) -> Void)?
+    let onClearColor: (() -> Void)?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 34, maximum: 42), spacing: 10)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Text("Course Color")
+                    .font(AppFont.bold(16, relativeTo: .headline))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Spacer()
+
+                if selectedColorIndex != nil, let onClearColor {
+                    Button(action: onClearColor) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                Circle()
+                                    .fill(AppTheme.surfaceSecondary)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Use automatic color")
+                }
+            }
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                ForEach(options) { option in
+                    Button {
+                        guard option.isDisabled == false else { return }
+                        onSelectColor?(option.token.index)
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(TimetablePalette.swatchColor(for: option.token, colorScheme: colorScheme))
+                                .frame(width: 34, height: 34)
+                                .overlay {
+                                    Circle()
+                                        .stroke(AppTheme.divider, lineWidth: 1)
+                                }
+
+                            if option.isSelected {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 13, weight: .black))
+                                    .foregroundStyle(Color.white)
+                                    .shadow(color: Color.black.opacity(0.35), radius: 2, y: 1)
+                            }
+
+                            if option.isDisabled {
+                                Circle()
+                                    .fill(AppTheme.surfacePrimary.opacity(colorScheme == .dark ? 0.72 : 0.78))
+                                    .frame(width: 34, height: 34)
+
+                                Image(systemName: "slash")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(AppTheme.textTertiary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(option.isDisabled)
+                    .accessibilityLabel(option.token.name)
+                }
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(AppTheme.surfacePrimary)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(AppTheme.divider, lineWidth: 1)
+                }
+        )
     }
 }
 
@@ -963,6 +1165,7 @@ private struct TimetableLoadingState: View {
 
 private struct TimetableCatalogSheet: View {
     let lectures: [TimetableLectureItem]
+    let filters: [TimetableCatalogFilter]
     @Binding var filter: TimetableCatalogFilter
     @Binding var query: String
     let memberContext: TimetableMemberContext?
@@ -1028,7 +1231,7 @@ private struct TimetableCatalogSheet: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(TimetableCatalogFilter.allCases, id: \.self) { item in
+                    ForEach(filters, id: \.self) { item in
                         Button {
                             filter = item
                         } label: {
@@ -1140,9 +1343,11 @@ private struct TimetableCatalogSheet: View {
 
     private func chipTitle(for item: TimetableCatalogFilter) -> String {
         switch item {
-        case .major:
+        case .memberMajor:
             guard let majorName = memberContext?.majorName else { return item.title }
             return majorName.count <= 14 ? majorName : "My Major"
+        case let .major(_, name):
+            return name.count <= 14 ? name : String(name.prefix(12)) + "..."
         default:
             return item.title
         }
@@ -1155,9 +1360,13 @@ private struct TimetableCatalogLectureCard: View {
     let onSelect: () -> Void
     let onAdd: () -> Void
     let onRemove: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let palette = TimetablePalette.token(for: TimetableViewModel.accentIndex(for: lecture.id))
+        let palette = TimetablePalette.token(
+            for: TimetableViewModel.accentIndex(for: lecture.id),
+            colorScheme: colorScheme
+        )
 
         HStack(spacing: 14) {
             Button(action: onSelect) {
@@ -1220,21 +1429,116 @@ private struct TimetableCatalogLectureCard: View {
 private enum TimetablePalette {
     struct Token {
         let accent: Color
-        let fill: Color
+        let gradientColors: [Color]
+        let border: Color
+        let innerHighlight: Color
+        let edgeShadow: Color
         let title: Color
+        let subtitle: Color
+        let caption: Color
     }
 
-    private static let tokens: [Token] = [
-        .init(accent: Color(red: 0.51, green: 0.34, blue: 0.97), fill: Color(red: 0.95, green: 0.93, blue: 1.0), title: Color(red: 0.35, green: 0.31, blue: 0.91)),
-        .init(accent: Color(red: 0.03, green: 0.78, blue: 0.70), fill: Color(red: 0.90, green: 0.98, blue: 0.96), title: Color(red: 0.00, green: 0.67, blue: 0.61)),
-        .init(accent: Color(red: 0.21, green: 0.49, blue: 0.98), fill: Color(red: 0.92, green: 0.95, blue: 1.0), title: Color(red: 0.16, green: 0.44, blue: 0.95)),
-        .init(accent: Color(red: 1.0, green: 0.43, blue: 0.05), fill: Color(red: 1.0, green: 0.95, blue: 0.90), title: Color(red: 1.0, green: 0.40, blue: 0.00)),
-        .init(accent: Color(red: 0.97, green: 0.22, blue: 0.64), fill: Color(red: 1.0, green: 0.92, blue: 0.97), title: Color(red: 0.95, green: 0.18, blue: 0.58)),
-        .init(accent: Color(red: 0.95, green: 0.53, blue: 0.11), fill: Color(red: 1.0, green: 0.95, blue: 0.90), title: Color(red: 0.89, green: 0.47, blue: 0.04))
-    ]
+    static func token(for index: Int, colorScheme: ColorScheme) -> Token {
+        let token = TimetableColorWheel.token(for: index)
+        let base = RGB(hex: token.hex)
+        let accent = swatchColor(for: token, colorScheme: colorScheme)
 
-    static func token(for index: Int) -> Token {
-        tokens[index % tokens.count]
+        let gradientColors: [Color]
+        let border: Color
+        let innerHighlight: Color
+        let edgeShadow: Color
+        switch colorScheme {
+        case .dark:
+            gradientColors = [
+                base.mixed(with: .white, amount: 0.24).color.opacity(0.40),
+                base.mixed(with: .white, amount: 0.34).color.opacity(0.27),
+                base.mixed(with: .white, amount: 0.44).color.opacity(0.14)
+            ]
+            border = base.mixed(with: .white, amount: 0.30).color.opacity(0.54)
+            innerHighlight = Color.white.opacity(0.08)
+            edgeShadow = Color.black.opacity(0.20)
+        default:
+            gradientColors = [
+                base.mixed(with: .white, amount: 0.58).color,
+                base.mixed(with: .white, amount: 0.76).color,
+                base.mixed(with: .white, amount: 0.91).color
+            ]
+            border = base.mixed(with: .black, amount: 0.12).color.opacity(0.48)
+            innerHighlight = Color.white.opacity(0.58)
+            edgeShadow = base.mixed(with: .black, amount: 0.18).color.opacity(0.12)
+        }
+
+        return Token(
+            accent: accent,
+            gradientColors: gradientColors,
+            border: border,
+            innerHighlight: innerHighlight,
+            edgeShadow: edgeShadow,
+            title: AppTheme.textPrimary,
+            subtitle: AppTheme.textSecondary,
+            caption: AppTheme.textTertiary
+        )
+    }
+
+    static func color(for token: TimetableColorToken) -> Color {
+        Color(hex: token.hex)
+    }
+
+    static func swatchColor(for token: TimetableColorToken, colorScheme: ColorScheme) -> Color {
+        let base = RGB(hex: token.hex)
+        switch colorScheme {
+        case .dark:
+            return base.mixed(with: .white, amount: 0.28).color.opacity(0.72)
+        default:
+            return base.mixed(with: .white, amount: 0.44).color
+        }
+    }
+}
+
+private struct RGB {
+    let red: Double
+    let green: Double
+    let blue: Double
+
+    static let white = RGB(red: 1, green: 1, blue: 1)
+    static let black = RGB(red: 0, green: 0, blue: 0)
+
+    init(red: Double, green: Double, blue: Double) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    init(hex: String) {
+        let sanitized = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var value: UInt64 = 0
+        Scanner(string: sanitized).scanHexInt64(&value)
+
+        red = Double((value >> 16) & 0xFF) / 255.0
+        green = Double((value >> 8) & 0xFF) / 255.0
+        blue = Double(value & 0xFF) / 255.0
+    }
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue)
+    }
+
+    func mixed(with other: RGB, amount: Double) -> RGB {
+        let clampedAmount = min(max(amount, 0), 1)
+        let retainedAmount = 1 - clampedAmount
+
+        return RGB(
+            red: (red * retainedAmount) + (other.red * clampedAmount),
+            green: (green * retainedAmount) + (other.green * clampedAmount),
+            blue: (blue * retainedAmount) + (other.blue * clampedAmount)
+        )
+    }
+}
+
+private extension Color {
+    init(hex: String) {
+        let rgb = RGB(hex: hex)
+        self.init(red: rgb.red, green: rgb.green, blue: rgb.blue)
     }
 }
 
@@ -1323,6 +1627,7 @@ private struct TimetableCatalogSheetPreview: View {
     var body: some View {
         TimetableCatalogSheet(
             lectures: PreviewTimetableData.catalog,
+            filters: [.all, .memberMajor, .general],
             filter: $filter,
             query: $query,
             memberContext: PreviewTimetableData.memberContext,

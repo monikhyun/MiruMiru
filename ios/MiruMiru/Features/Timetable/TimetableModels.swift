@@ -113,20 +113,58 @@ struct TimetableDetail: Equatable, Sendable {
     let lectures: [TimetableLectureItem]
 }
 
-enum TimetableCatalogFilter: CaseIterable, Equatable, Sendable {
+enum TimetableCatalogFilter: Hashable, Sendable {
     case all
-    case major
+    case memberMajor
     case general
+    case major(code: String, name: String)
 
     var title: String {
         switch self {
         case .all:
             return "All"
-        case .major:
-            return "Major"
+        case .memberMajor:
+            return "My Major"
         case .general:
             return "General"
+        case let .major(_, name):
+            return name
         }
+    }
+}
+
+struct TimetableColorToken: Identifiable, Equatable, Sendable {
+    let index: Int
+    let name: String
+    let hex: String
+
+    var id: Int { index }
+}
+
+enum TimetableColorWheel {
+    static let tokens: [TimetableColorToken] = [
+        .init(index: 0, name: "Red", hex: "#FF0000"),
+        .init(index: 1, name: "Red-Orange", hex: "#FF4500"),
+        .init(index: 2, name: "Orange", hex: "#FFA500"),
+        .init(index: 3, name: "Amber", hex: "#FFBF00"),
+        .init(index: 4, name: "Yellow", hex: "#FFFF00"),
+        .init(index: 5, name: "Yellow-Green", hex: "#7FFF00"),
+        .init(index: 6, name: "Green", hex: "#008000"),
+        .init(index: 7, name: "Blue-Green", hex: "#008080"),
+        .init(index: 8, name: "Blue", hex: "#0000FF"),
+        .init(index: 9, name: "Indigo", hex: "#4B0082"),
+        .init(index: 10, name: "Violet/Purple", hex: "#800080"),
+        .init(index: 11, name: "Magenta", hex: "#FF00FF")
+    ]
+
+    static var count: Int { tokens.count }
+
+    static func token(for index: Int) -> TimetableColorToken {
+        tokens[normalizedIndex(index)]
+    }
+
+    static func normalizedIndex(_ index: Int) -> Int {
+        ((index % count) + count) % count
     }
 }
 
@@ -149,6 +187,21 @@ struct TimetableGridBlock: Identifiable, Equatable, Sendable {
     let startMinutes: Int
     let endMinutes: Int
     let accentIndex: Int
+}
+
+struct TimetableGridMarker: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let startMinutes: Int
+    let endMinutes: Int
+}
+
+struct TimetableColorPickerOption: Identifiable, Equatable, Sendable {
+    let token: TimetableColorToken
+    let isSelected: Bool
+    let isDisabled: Bool
+
+    var id: Int { token.index }
 }
 
 enum TimetableEmptyState: Equatable {
@@ -215,6 +268,7 @@ struct TimetableLoadedContent: Equatable {
     let timetableId: Int64?
     let lectures: [TimetableLectureItem]
     let blocks: [TimetableGridBlock]
+    let markers: [TimetableGridMarker]
     let addedLectureIds: Set<Int64>
     let hourRange: TimetableHourRange
 }
@@ -223,6 +277,7 @@ struct TimetableEmptyContent: Equatable {
     let memberContext: TimetableMemberContext?
     let selectedSemester: TimetableSemester?
     let hourRange: TimetableHourRange
+    let markers: [TimetableGridMarker]
     let state: TimetableEmptyState
 }
 

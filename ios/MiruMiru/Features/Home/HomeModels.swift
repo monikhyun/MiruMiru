@@ -89,6 +89,74 @@ struct TodayClassRow: Equatable, Identifiable, Sendable {
     let badge: TodayClassBadge?
 }
 
+enum HomeScheduleItemType: String, CaseIterable, Codable, Equatable, Sendable {
+    case quiz = "QUIZ"
+    case miniTest = "MINI_TEST"
+    case assignment = "ASSIGNMENT"
+    case memo = "MEMO"
+
+    var displayName: String {
+        switch self {
+        case .quiz:
+            return "Quiz"
+        case .miniTest:
+            return "Mini Test"
+        case .assignment:
+            return "Assignment"
+        case .memo:
+            return "Memo"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .quiz:
+            return "questionmark.circle.fill"
+        case .miniTest:
+            return "checkmark.seal.fill"
+        case .assignment:
+            return "doc.text.fill"
+        case .memo:
+            return "note.text"
+        }
+    }
+}
+
+enum HomeScheduleItemStatus: String, Equatable, Sendable {
+    case all
+    case open
+    case completed
+}
+
+struct HomeScheduleItem: Equatable, Identifiable, Sendable {
+    let itemId: Int64
+    let lectureId: Int64?
+    let lectureName: String?
+    let type: HomeScheduleItemType
+    let title: String
+    let memo: String?
+    let dueAt: Date?
+    let completed: Bool
+    let createdAt: Date
+    let updatedAt: Date
+
+    var id: Int64 { itemId }
+}
+
+struct HomeScheduleItemInput: Equatable, Sendable {
+    let lectureId: Int64?
+    let type: HomeScheduleItemType
+    let title: String
+    let memo: String?
+    let dueAt: Date?
+    let completed: Bool
+}
+
+struct HomeScheduleLectureOption: Equatable, Identifiable, Sendable {
+    let id: Int64
+    let name: String
+}
+
 enum HomeEmptyState: Equatable {
     case noSemester
     case noTimetable
@@ -121,6 +189,8 @@ struct HomeLoadedContent: Equatable {
     let profile: HomeMemberProfile
     let semesterTitle: String
     let todayClasses: [TodayClassRow]
+    let scheduleItems: [HomeScheduleItem]
+    let lectureOptions: [HomeScheduleLectureOption]
     let trendingPosts: [HotPostSummary]
 }
 
@@ -128,6 +198,8 @@ struct HomeEmptyContent: Equatable {
     let profile: HomeMemberProfile
     let semesterTitle: String?
     let state: HomeEmptyState
+    let scheduleItems: [HomeScheduleItem]
+    let lectureOptions: [HomeScheduleLectureOption]
     let trendingPosts: [HotPostSummary]
 }
 
@@ -166,9 +238,42 @@ protocol HomeClientProtocol: Sendable {
     func fetchSemesters() async throws -> [HomeSemester]
     func fetchTimetable(semesterId: Int64) async throws -> HomeTimetable
     func fetchHotPosts() async throws -> [HotPostSummary]
+    func fetchScheduleItems(
+        from: Date,
+        to: Date,
+        status: HomeScheduleItemStatus
+    ) async throws -> [HomeScheduleItem]
+    func createScheduleItem(_ input: HomeScheduleItemInput) async throws -> HomeScheduleItem
+    func updateScheduleItem(itemId: Int64, input: HomeScheduleItemInput) async throws -> HomeScheduleItem
+    func setScheduleItemCompletion(itemId: Int64, completed: Bool) async throws -> HomeScheduleItem
+    func deleteScheduleItem(itemId: Int64) async throws
     func invalidateCache() async
 }
 
 extension HomeClientProtocol {
+    func fetchScheduleItems(
+        from: Date,
+        to: Date,
+        status: HomeScheduleItemStatus
+    ) async throws -> [HomeScheduleItem] {
+        []
+    }
+
+    func createScheduleItem(_ input: HomeScheduleItemInput) async throws -> HomeScheduleItem {
+        throw HomeClientError.unexpected
+    }
+
+    func updateScheduleItem(itemId: Int64, input: HomeScheduleItemInput) async throws -> HomeScheduleItem {
+        throw HomeClientError.unexpected
+    }
+
+    func setScheduleItemCompletion(itemId: Int64, completed: Bool) async throws -> HomeScheduleItem {
+        throw HomeClientError.unexpected
+    }
+
+    func deleteScheduleItem(itemId: Int64) async throws {
+        throw HomeClientError.unexpected
+    }
+
     func invalidateCache() async {}
 }

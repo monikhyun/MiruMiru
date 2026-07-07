@@ -121,3 +121,21 @@ CREATE TABLE IF NOT EXISTS chat_report (
     INDEX idx_chat_report_reporter_created (reporter_id, created_at),
     INDEX idx_chat_report_target_created (target_id, created_at)
 );
+
+CREATE TABLE IF NOT EXISTS schedule_item (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    member_id BIGINT NOT NULL,
+    lecture_id BIGINT NULL,
+    type VARCHAR(20) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    memo VARCHAR(2000) NULL,
+    due_at DATETIME(6) NULL,
+    completed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_schedule_item_member FOREIGN KEY (member_id) REFERENCES member (id),
+    CONSTRAINT fk_schedule_item_lecture FOREIGN KEY (lecture_id) REFERENCES lecture (id),
+    INDEX idx_schedule_item_member_due (member_id, due_at),
+    INDEX idx_schedule_item_member_completed (member_id, completed)
+);

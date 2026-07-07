@@ -9,6 +9,7 @@ struct HomeView: View {
     private let onBoardsTap: () -> Void
     private let onTrendingPostTap: (Int64) -> Void
     @State private var showLogoutPrompt = false
+    @State private var scheduleEditor: HomeScheduleEditorDestination?
 
     init(
         session: AppSession,
@@ -55,6 +56,7 @@ struct HomeView: View {
                         rows: content.todayClasses,
                         onSemesterTap: onSemesterTap
                     )
+                    scheduleSection
                     if trendingPosts.isEmpty == false {
                         HomeTrendingPostsSection(
                             posts: trendingPosts,
@@ -74,6 +76,7 @@ struct HomeView: View {
                         semesterTitle: content.semesterTitle,
                         onSemesterTap: onSemesterTap
                     )
+                    scheduleSection
                     if trendingPosts.isEmpty == false {
                         HomeTrendingPostsSection(
                             posts: trendingPosts,
@@ -115,7 +118,40 @@ struct HomeView: View {
             } message: {
                 Text("You'll need to sign in again to access your campus features.")
             }
+            .sheet(item: $scheduleEditor) { destination in
+                HomeScheduleEditorView(
+                    viewModel: viewModel,
+                    destination: destination,
+                    lectureOptions: viewModel.lectureOptionsSnapshot()
+                )
+            }
         }
+    }
+
+    private var scheduleSection: some View {
+        HomeScheduleSection(
+            todayDeadlines: viewModel.todayDeadlinesSnapshot(),
+            openTasks: viewModel.openScheduleItemsSnapshot(),
+            completedTasks: viewModel.completedScheduleItemsSnapshot(),
+            mutationMessage: viewModel.scheduleMutationMessage,
+            onQuickAdd: { type in
+                scheduleEditor = .create(type)
+            },
+            onToggleCompletion: { item in
+                Task {
+                    await viewModel.toggleScheduleItemCompletion(item)
+                }
+            },
+            onEdit: { item in
+                scheduleEditor = .edit(item)
+            },
+            onDelete: { item in
+                Task {
+                    await viewModel.deleteScheduleItem(item)
+                }
+            },
+            onDismissMessage: viewModel.clearScheduleMutationMessage
+        )
     }
 
     private var background: some View {
@@ -501,6 +537,447 @@ private struct HomeLoadingCard: View {
                         }
                 }
             }
+        }
+    }
+}
+
+private enum HomeScheduleEditorDestination: Identifiable {
+    case create(HomeScheduleItemType)
+    case edit(HomeScheduleItem)
+
+    var id: String {
+        switch self {
+        case let .create(type):
+            return "create-\(type.rawValue)"
+        case let .edit(item):
+            return "edit-\(item.itemId)"
+        }
+    }
+}
+
+private struct HomeScheduleSection: View {
+    let todayDeadlines: [HomeScheduleItem]
+    let openTasks: [HomeScheduleItem]
+    let completedTasks: [HomeScheduleItem]
+    let mutationMessage: String?
+    let onQuickAdd: (HomeScheduleItemType) -> Void
+    let onToggleCompletion: (HomeScheduleItem) -> Void
+    let onEdit: (HomeScheduleItem) -> Void
+    let onDelete: (HomeScheduleItem) -> Void
+    let onDismissMessage: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Text("Schedule")
+                    .font(AppFont.extraBold(28, relativeTo: .title2))
+                    .foregroundStyle(AppTheme.textPrimary)
+
+                Spacer()
+
+                Menu {
+                    Button {
+                        onQuickAdd(.memo)
+                    } label: {
+                        Label("New Memo", systemImage: HomeScheduleItemType.memo.systemImage)
+                    }
+
+                    Button {
+                        onQuickAdd(.assignment)
+                    } label: {
+                        Label("New Assignment", systemImage: HomeScheduleItemType.assignment.systemImage)
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                        .font(AppFont.semibold(15, relativeTo: .subheadline))
+                        .foregroundStyle(AuthPalette.primaryStart)
+                }
+                .accessibilityLabel("Add a schedule item")
+            }
+
+            HStack(spacing: 12) {
+                HomeQuickAddButton(
+                    title: "Quick Memo",
+                    systemImage: HomeScheduleItemType.memo.systemImage,
+                    action: { onQuickAdd(.memo) }
+                )
+                HomeQuickAddButton(
+                    title: "Assignment",
+                    systemImage: HomeScheduleItemType.assignment.systemImage,
+                    action: { onQuickAdd(.assignment) }
+                )
+            }
+
+            if let mutationMessage {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.orange)
+
+                    Text(mutationMessage)
+                        .font(AppFont.medium(14, relativeTo: .subheadline))
+                        .foregroundStyle(AppTheme.textSecondary)
+
+                    Spacer()
+
+                    Button(action: onDismissMessage) {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss schedule error")
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(AppTheme.surfacePrimary)
+                )
+            }
+
+            HomeScheduleList(
+                title: "Today's Deadlines",
+                emptyMessage: "No deadlines due today.",
+                items: todayDeadlines,
+                onToggleCompletion: onToggleCompletion,
+                onEdit: onEdit,
+                onDelete: onDelete
+            )
+
+            HomeScheduleList(
+                title: "Open Tasks",
+                emptyMessage: "No open tasks. Add a memo or assignment when something comes up.",
+                items: openTasks,
+                onToggleCompletion: onToggleCompletion,
+                onEdit: onEdit,
+                onDelete: onDelete
+            )
+
+            HomeScheduleList(
+                title: "Completed",
+                emptyMessage: "Completed items will stay here so you can reopen or manage them.",
+                items: completedTasks,
+                onToggleCompletion: onToggleCompletion,
+                onEdit: onEdit,
+                onDelete: onDelete
+            )
+        }
+    }
+}
+
+private struct HomeQuickAddButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(AppFont.semibold(15, relativeTo: .subheadline))
+                .foregroundStyle(AppTheme.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(AppTheme.surfacePrimary)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(AppTheme.divider, lineWidth: 1)
+                        }
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct HomeScheduleList: View {
+    let title: String
+    let emptyMessage: String
+    let items: [HomeScheduleItem]
+    let onToggleCompletion: (HomeScheduleItem) -> Void
+    let onEdit: (HomeScheduleItem) -> Void
+    let onDelete: (HomeScheduleItem) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(AppFont.bold(20, relativeTo: .headline))
+                .foregroundStyle(AppTheme.textPrimary)
+
+            VStack(spacing: 0) {
+                if items.isEmpty {
+                    Text(emptyMessage)
+                        .font(AppFont.medium(15, relativeTo: .subheadline))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(18)
+                } else {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        HomeScheduleItemRow(
+                            item: item,
+                            onToggleCompletion: { onToggleCompletion(item) },
+                            onEdit: { onEdit(item) },
+                            onDelete: { onDelete(item) }
+                        )
+
+                        if index < items.count - 1 {
+                            Divider()
+                                .padding(.leading, 54)
+                        }
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(AppTheme.surfacePrimary)
+            )
+        }
+    }
+}
+
+private struct HomeScheduleItemRow: View {
+    let item: HomeScheduleItem
+    let onToggleCompletion: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Button(action: onToggleCompletion) {
+                Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(item.completed ? AuthPalette.primaryStart : AppTheme.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(item.completed ? "Mark \(item.title) incomplete" : "Mark \(item.title) complete")
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 8) {
+                    Label(item.type.displayName, systemImage: item.type.systemImage)
+                        .font(AppFont.bold(12, relativeTo: .caption))
+                        .foregroundStyle(AuthPalette.primaryStart)
+
+                    if let lectureName = item.lectureName {
+                        Text(lectureName)
+                            .font(AppFont.medium(12, relativeTo: .caption))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Text(item.title)
+                    .font(AppFont.bold(17, relativeTo: .body))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .strikethrough(item.completed, color: AppTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let memo = item.memo, memo.isEmpty == false {
+                    Text(memo)
+                        .font(AppFont.medium(14, relativeTo: .subheadline))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(2)
+                }
+
+                if let dueAt = item.dueAt {
+                    Label {
+                        Text(dueAt.formatted(date: .abbreviated, time: .shortened))
+                    } icon: {
+                        Image(systemName: "clock")
+                    }
+                    .font(AppFont.medium(13, relativeTo: .caption))
+                    .foregroundStyle(AppTheme.textTertiary)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Menu {
+                Button(action: onEdit) {
+                    Label("Edit", systemImage: "pencil")
+                }
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .frame(width: 34, height: 34)
+            }
+            .accessibilityLabel("Actions for \(item.title)")
+        }
+        .padding(16)
+    }
+}
+
+private struct HomeScheduleEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: HomeViewModel
+
+    let destination: HomeScheduleEditorDestination
+    let lectureOptions: [HomeScheduleLectureOption]
+    let dueDateRange: ClosedRange<Date>
+
+    @State private var type: HomeScheduleItemType
+    @State private var title: String
+    @State private var memo: String
+    @State private var selectedLectureId: Int64?
+    @State private var hasDueDate: Bool
+    @State private var dueAt: Date
+    @State private var isSaving = false
+
+    init(
+        viewModel: HomeViewModel,
+        destination: HomeScheduleEditorDestination,
+        lectureOptions: [HomeScheduleLectureOption]
+    ) {
+        self.viewModel = viewModel
+        self.destination = destination
+        self.lectureOptions = lectureOptions
+
+        let requestedDueDate: Date?
+        switch destination {
+        case .create:
+            requestedDueDate = nil
+        case let .edit(item):
+            requestedDueDate = item.dueAt
+        }
+        let dateConfiguration = viewModel.scheduleEditorDateConfiguration(for: requestedDueDate)
+        dueDateRange = dateConfiguration.range
+
+        switch destination {
+        case let .create(type):
+            _type = State(initialValue: type)
+            _title = State(initialValue: "")
+            _memo = State(initialValue: "")
+            _selectedLectureId = State(initialValue: nil)
+            _hasDueDate = State(initialValue: type != .memo)
+            _dueAt = State(initialValue: dateConfiguration.selection)
+        case let .edit(item):
+            _type = State(initialValue: item.type)
+            _title = State(initialValue: item.title)
+            _memo = State(initialValue: item.memo ?? "")
+            _selectedLectureId = State(initialValue: item.lectureId)
+            _hasDueDate = State(initialValue: item.dueAt != nil)
+            _dueAt = State(initialValue: dateConfiguration.selection)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Item") {
+                    Picker("Type", selection: $type) {
+                        ForEach(HomeScheduleItemType.allCases, id: \.self) { option in
+                            Label(option.displayName, systemImage: option.systemImage)
+                                .tag(option)
+                        }
+                    }
+
+                    TextField("Title", text: $title)
+                        .textInputAutocapitalization(.sentences)
+
+                    TextField("Notes (optional)", text: $memo, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+
+                Section("Lecture") {
+                    Picker("Associated lecture", selection: $selectedLectureId) {
+                        Text("No lecture")
+                            .tag(Int64?.none)
+                        ForEach(lectureOptions) { lecture in
+                            Text(lecture.name)
+                                .tag(Int64?.some(lecture.id))
+                        }
+                    }
+                }
+
+                Section("Deadline") {
+                    Toggle("Add deadline", isOn: $hasDueDate)
+                    if hasDueDate {
+                        DatePicker(
+                            "Due",
+                            selection: $dueAt,
+                            in: dueDateRange,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                    }
+                }
+
+                if let message = viewModel.scheduleMutationMessage {
+                    Section {
+                        Text(message)
+                            .foregroundStyle(Color.red)
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.pageBackground.ignoresSafeArea())
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isSaving)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "Saving…" : "Save") {
+                        Task {
+                            await save()
+                        }
+                    }
+                    .disabled(isSaving || trimmedTitle.isEmpty)
+                }
+            }
+        }
+    }
+
+    private var navigationTitle: String {
+        switch destination {
+        case .create:
+            return "New Schedule Item"
+        case .edit:
+            return "Edit Schedule Item"
+        }
+    }
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+
+        let trimmedMemo = memo.trimmingCharacters(in: .whitespacesAndNewlines)
+        let completed: Bool
+        if case let .edit(item) = destination {
+            completed = item.completed
+        } else {
+            completed = false
+        }
+
+        let input = HomeScheduleItemInput(
+            lectureId: selectedLectureId,
+            type: type,
+            title: trimmedTitle,
+            memo: trimmedMemo.isEmpty ? nil : trimmedMemo,
+            dueAt: hasDueDate ? dueAt : nil,
+            completed: completed
+        )
+
+        let saved: Bool
+        switch destination {
+        case .create:
+            saved = await viewModel.createScheduleItem(input)
+        case let .edit(item):
+            saved = await viewModel.updateScheduleItem(itemId: item.itemId, input: input)
+        }
+
+        if saved {
+            dismiss()
         }
     }
 }

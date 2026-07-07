@@ -24,3 +24,7 @@ Thumbs.db
 .omx/
 /deploy/
 /docs/
+
+# --- Xcode 사용자 상태 ---
+xcuserdata/
+*.xcuserstate

@@ -84,6 +84,112 @@ final class HomeAPIClientTests: XCTestCase {
         XCTAssertTrue(timetable.lectures.isEmpty)
     }
 
+    func testFetchScheduleItemsEncodesISODateRangeAndDecodesResponse() async throws {
+        let from = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-17T15:00:00Z"))
+        let to = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-18T15:00:00Z"))
+        let client = makeScheduleClient { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/api/v1/schedule-items")
+
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+                item.value.map { (item.name, $0) }
+            })
+            XCTAssertEqual(query["from"], "2026-03-17T15:00:00.000Z")
+            XCTAssertEqual(query["to"], "2026-03-18T15:00:00.000Z")
+            XCTAssertEqual(query["status"], "all")
+
+            return self.scheduleListResponseBody()
+        }
+
+        let items = try await client.fetchScheduleItems(from: from, to: to, status: .all)
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].itemId, 101)
+        XCTAssertEqual(items[0].lectureName, "Algorithms")
+        XCTAssertEqual(items[0].type, .assignment)
+        XCTAssertEqual(items[0].dueAt, ISO8601DateFormatter().date(from: "2026-03-18T05:30:00Z"))
+    }
+
+    func testCreateScheduleItemPostsOptionalLectureAndISODeadline() async throws {
+        let dueAt = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-03-18T05:30:00Z"))
+        let client = makeScheduleClient { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/api/v1/schedule-items")
+            let payload = try self.jsonBody(for: request)
+            XCTAssertEqual(payload["lectureId"] as? Int, 44)
+            XCTAssertEqual(payload["type"] as? String, "ASSIGNMENT")
+            XCTAssertEqual(payload["title"] as? String, "Problem set 4")
+            XCTAssertEqual(payload["memo"] as? String, "Questions 1-8")
+            XCTAssertEqual(payload["dueAt"] as? String, "2026-03-18T05:30:00.000Z")
+            XCTAssertEqual(payload["completed"] as? Bool, false)
+            return self.scheduleResponseBody()
+        }
+
+        let item = try await client.createScheduleItem(
+            HomeScheduleItemInput(
+                lectureId: 44,
+                type: .assignment,
+                title: "Problem set 4",
+                memo: "Questions 1-8",
+                dueAt: dueAt,
+                completed: false
+            )
+        )
+
+        XCTAssertEqual(item.itemId, 101)
+    }
+
+    func testUpdateAndCompletionUseDedicatedMethods() async throws {
+        var methods: [String] = []
+        var paths: [String] = []
+        let client = makeScheduleClient { request in
+            methods.append(try XCTUnwrap(request.httpMethod))
+            paths.append(try XCTUnwrap(request.url?.path))
+            let payload = try self.jsonBody(for: request)
+            if request.httpMethod == "PATCH" {
+                XCTAssertEqual(payload["completed"] as? Bool, true)
+            }
+            return self.scheduleResponseBody(completed: request.httpMethod == "PATCH")
+        }
+
+        _ = try await client.updateScheduleItem(
+            itemId: 101,
+            input: HomeScheduleItemInput(
+                lectureId: nil,
+                type: .memo,
+                title: "Bring calculator",
+                memo: nil,
+                dueAt: nil,
+                completed: false
+            )
+        )
+        let completed = try await client.setScheduleItemCompletion(itemId: 101, completed: true)
+
+        XCTAssertEqual(methods, ["PUT", "PATCH"])
+        XCTAssertEqual(
+            paths,
+            ["/api/v1/schedule-items/101", "/api/v1/schedule-items/101/completion"]
+        )
+        XCTAssertTrue(completed.completed)
+    }
+
+    func testDeleteScheduleItemUsesDeleteRoute() async throws {
+        let client = makeScheduleClient { request in
+            XCTAssertEqual(request.httpMethod, "DELETE")
+            XCTAssertEqual(request.url?.path, "/api/v1/schedule-items/101")
+            return """
+            {
+              "success": true,
+              "data": null,
+              "error": null
+            }
+            """
+        }
+
+        try await client.deleteScheduleItem(itemId: 101)
+    }
+
     func testFetchProfileMapsFailedReissueToInvalidSession() async {
         let store = tokenStore()
         MockURLProtocol.requestHandler = { request in
@@ -498,6 +604,102 @@ final class HomeAPIClientTests: XCTestCase {
             session: session
         )
         return HomeAPIClient(apiClient: apiClient, tokenStore: tokenStore)
+    }
+
+    private func makeScheduleClient(
+        response: @escaping (URLRequest) throws -> String
+    ) -> HomeAPIClient {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer preview-access")
+            let responseBody = try response(request)
+            let httpResponse = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (httpResponse, Data(responseBody.utf8))
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let apiClient = APIClient(
+            environment: AppEnvironment(
+                apiBaseURL: URL(string: "http://localhost")!,
+                enforcesAcademicSuffixValidation: true
+            ),
+            session: session
+        )
+        return HomeAPIClient(apiClient: apiClient, tokenStore: tokenStore())
+    }
+
+    private func jsonBody(for request: URLRequest) throws -> [String: Any] {
+        let body: Data
+        if let httpBody = request.httpBody {
+            body = httpBody
+        } else if let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+
+            var data = Data()
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 1_024)
+            defer { buffer.deallocate() }
+            while stream.hasBytesAvailable {
+                let count = stream.read(buffer, maxLength: 1_024)
+                guard count > 0 else { break }
+                data.append(buffer, count: count)
+            }
+            body = data
+        } else {
+            throw XCTSkip("Request body was unavailable")
+        }
+
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+    }
+
+    private func scheduleResponseBody(completed: Bool = false) -> String {
+        """
+        {
+          "success": true,
+          "data": {
+            "itemId": 101,
+            "lectureId": 44,
+            "lectureName": "Algorithms",
+            "type": "ASSIGNMENT",
+            "title": "Problem set 4",
+            "memo": "Questions 1-8",
+            "dueAt": "2026-03-18T05:30:00Z",
+            "completed": \(completed),
+            "createdAt": "2026-03-17T03:00:00.123Z",
+            "updatedAt": "2026-03-17T03:10:00Z"
+          },
+          "error": null
+        }
+        """
+    }
+
+    private func scheduleListResponseBody() -> String {
+        """
+        {
+          "success": true,
+          "data": [
+            {
+              "itemId": 101,
+              "lectureId": 44,
+              "lectureName": "Algorithms",
+              "type": "ASSIGNMENT",
+              "title": "Problem set 4",
+              "memo": "Questions 1-8",
+              "dueAt": "2026-03-18T05:30:00Z",
+              "completed": false,
+              "createdAt": "2026-03-17T03:00:00.123Z",
+              "updatedAt": "2026-03-17T03:10:00Z"
+            }
+          ],
+          "error": null
+        }
+        """
     }
 
     private func tokenStore() -> InMemoryTokenStore {

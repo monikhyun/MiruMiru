@@ -43,5 +43,7 @@ enum class ErrorCode(
     COURSE_NOT_FOUND("COURSE_001", "error.course_not_found", 404),
     COURSE_REVIEW_NOT_FOUND("COURSE_002", "error.course_review_not_found", 404),
     COURSE_REVIEW_ALREADY_EXISTS("COURSE_003", "error.course_review_already_exists", 409),
-    COURSE_REVIEW_TARGET_NOT_FOUND("COURSE_004", "error.course_review_target_not_found", 404)
+    COURSE_REVIEW_TARGET_NOT_FOUND("COURSE_004", "error.course_review_target_not_found", 404),
+    SCHEDULE_ITEM_NOT_FOUND("SCHEDULE_001", "error.schedule_item_not_found", 404),
+    SCHEDULE_LECTURE_INVALID("SCHEDULE_002", "error.schedule_lecture_invalid", 400)
 }
